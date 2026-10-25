@@ -7,6 +7,7 @@ from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
 from app.economy import register_player, get_player, collect_income, upgrade_business, production_per_minute
 from app.keyboards import main_menu
+from app.seasons import season_scheduler
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN)
@@ -64,20 +65,29 @@ async def upgrade(callback: CallbackQuery):
 @dp.callback_query(F.data == 'ranking')
 async def ranking(callback: CallbackQuery):
     async with get_pool().acquire() as conn:
-        rows = await conn.fetch('SELECT display_name, cash, reputation, business_level FROM players ORDER BY reputation DESC, cash DESC LIMIT 10')
+        rows = await conn.fetch(
+            """SELECT display_name, cash, reputation, business_level
+               FROM players ORDER BY cash DESC, business_level DESC, reputation DESC LIMIT 10"""
+        )
     if not rows:
         text = 'No players ranked yet. Be the first to build an empire!'
     else:
-        text = '🏆 <b>EMPIRE RANKING</b>\n\n' + '\n'.join(f'{i}. {r["display_name"]} — ⭐ {r["reputation"]:,} | 💵 {r["cash"]:,}' for i, r in enumerate(rows, 1))
+        text = '🏆 <b>EMPIRE RANKING</b>\n\n' + '\n'.join(
+            f'{i}. {r["display_name"]} — 💵 {r["cash"]:,} | ⭐ {r["reputation"]:,}'
+            for i, r in enumerate(rows, 1)
+        )
     await callback.message.answer(text, reply_markup=main_menu())
     await callback.answer()
 
 async def main():
     await connect()
+    season_task = asyncio.create_task(season_scheduler(), name='season-scheduler')
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
     finally:
+        season_task.cancel()
+        await asyncio.gather(season_task, return_exceptions=True)
         await close()
         await bot.session.close()
 
