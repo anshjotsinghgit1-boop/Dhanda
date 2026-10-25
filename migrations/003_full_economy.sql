@@ -112,3 +112,13 @@ VALUES
  ('industrial_park','Industrial Park',500000,150,200,30)
 ON CONFLICT(building_key) DO NOTHING;
 
+
+-- Permanent asset net-worth is capped at 25,000 in aggregate per player.
+CREATE OR REPLACE VIEW player_asset_valuation AS
+SELECT pa.player_id,
+       COALESCE(SUM(ac.net_worth * pa.quantity) FILTER (WHERE NOT pa.permanent),0)
+       + LEAST(25000,COALESCE(SUM(ac.net_worth * pa.quantity) FILTER (WHERE pa.permanent),0))
+       AS asset_value
+FROM player_assets pa
+JOIN asset_catalog ac ON ac.id=pa.asset_id
+GROUP BY pa.player_id;
