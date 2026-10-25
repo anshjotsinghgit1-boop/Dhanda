@@ -112,6 +112,3 @@ VALUES
  ('industrial_park','Industrial Park',500000,150,200,30)
 ON CONFLICT(building_key) DO NOTHING;
 
-INSERT INTO season_settings(key, value)
-VALUES ('permanent_asset_net_worth_cap','25000')
-ON CONFLICT(key) DO NOTHING;
