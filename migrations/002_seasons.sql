@@ -28,3 +28,10 @@ CREATE TABLE IF NOT EXISTS season_settings (
 );
 INSERT INTO season_settings(singleton, duration_days)
 VALUES (TRUE, 7) ON CONFLICT (singleton) DO NOTHING;
+
+-- schema.sql may have inserted season id 1 explicitly; align BIGSERIAL before next insert.
+SELECT setval(
+    pg_get_serial_sequence('seasons', 'id'),
+    GREATEST(COALESCE((SELECT MAX(id) FROM seasons), 1), 1),
+    TRUE
+);
