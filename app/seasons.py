@@ -29,12 +29,19 @@ async def settle_expired_season() -> bool:
             if not expired:
                 return False
 
-            # Until the full asset/stock market is implemented, this ranking uses cash only.
-            # Reputation is retained but is not incorrectly mixed into the temporary net-worth score.
+            # Rank by current net worth: cash + stocks + gold value + owned asset value.
             players = await conn.fetch(
-                """SELECT telegram_id, display_name, cash, reputation, business_level
-                   FROM players WHERE season_id = $1
-                   ORDER BY cash DESC, business_level DESC, reputation DESC, telegram_id ASC""",
+                """SELECT p.telegram_id,p.display_name,p.cash,p.reputation,p.business_level,
+                          p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)
+                          +COALESCE(a.asset_value,0) AS net_worth
+                   FROM players p
+                   LEFT JOIN (
+                     SELECT pa.player_id,SUM(ac.net_worth*pa.quantity) AS asset_value
+                     FROM player_assets pa JOIN asset_catalog ac ON ac.id=pa.asset_id
+                     GROUP BY pa.player_id
+                   ) a ON a.player_id=p.telegram_id
+                   WHERE p.season_id=$1
+                   ORDER BY net_worth DESC,COALESCE(a.asset_value,0) DESC,p.stocks DESC,p.cash DESC,p.telegram_id ASC""",
                 season["id"],
             )
             for rank, player in enumerate(players, start=1):
@@ -54,6 +61,14 @@ async def settle_expired_season() -> bool:
                            VALUES ($1, 'fosbu_season_reward', $2, $3)
                            ON CONFLICT (owner_id, asset_code, source_season_id) DO NOTHING""",
                         player["telegram_id"], season["id"], f"Fosbu Season Reward #{rank}",
+                    )
+                    # The permanent reward is a capped-value inventory asset; unique permanent
+                    # ownership prevents duplicate copies from stacking its net-worth or buffs.
+                    await conn.execute(
+                        """INSERT INTO player_assets(player_id,asset_id,quantity,permanent)
+                           SELECT $1,id,1,TRUE FROM asset_catalog WHERE asset_key='gold_vault'
+                           ON CONFLICT(player_id,asset_id,permanent) DO NOTHING""",
+                        player["telegram_id"],
                     )
 
             await conn.execute("UPDATE seasons SET settled_at = NOW() WHERE id = $1", season["id"])
