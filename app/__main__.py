@@ -95,10 +95,8 @@ async def ranking(callback: CallbackQuery):
     async with get_pool().acquire() as conn:
         rows = await conn.fetch('''SELECT p.display_name,p.cash,p.reputation,p.business_level,
             p.stocks,p.gold_grams,
-            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.assets,0) AS worth
-            FROM players p LEFT JOIN (SELECT pa.player_id,SUM(ac.net_worth*pa.quantity) assets
-              FROM player_assets pa JOIN asset_catalog ac ON ac.id=pa.asset_id GROUP BY pa.player_id) a
-              ON a.player_id=p.telegram_id
+            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth
+            FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
             ORDER BY worth DESC,p.reputation DESC,p.telegram_id ASC LIMIT 10''')
     if not rows:
         text = 'No players ranked yet. Be the first to build an empire!'
@@ -263,9 +261,7 @@ async def ranking_command(message: Message):
     async with get_pool().acquire() as conn:
         rows = await conn.fetch('''SELECT p.display_name,p.cash,p.reputation,p.business_level,p.stocks,p.gold_grams,
             p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.assets,0) AS worth
-            FROM players p LEFT JOIN (SELECT pa.player_id,SUM(ac.net_worth*pa.quantity) assets
-            FROM player_assets pa JOIN asset_catalog ac ON ac.id=pa.asset_id GROUP BY pa.player_id) a
-            ON a.player_id=p.telegram_id ORDER BY worth DESC,p.reputation DESC LIMIT 10''')
+            FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id ORDER BY worth DESC,p.reputation DESC LIMIT 10''')
     text = '🏆 <b>FOSBU LIST — TOP 10</b>\n\n' + ('\n'.join(f'{i}. {r["display_name"]} — {r["worth"]:,} NW' for i, r in enumerate(rows, 1)) if rows else 'No players yet.')
     await message.answer(text)
 
