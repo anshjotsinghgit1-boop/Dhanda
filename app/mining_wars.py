@@ -30,12 +30,9 @@ async def join_team(chat_id: int, player_id: int, team: int) -> tuple[bool, str]
             already = await conn.fetchval("SELECT team FROM mining_war_players WHERE war_id=$1 AND player_id=$2", war["id"], player_id)
             if already:
                 return False, f"You already joined Team {already}."
-            count = await conn.fetchval("SELECT COUNT(*) FROM mining_war_players WHERE war_id=$1 AND team=$2", war["id"], team)
-            if count >= war["team_size"]:
-                return False, f"Team {team} is full ({war['team_size']} players)."
             await conn.execute("INSERT INTO mining_war_players(war_id,player_id,team) VALUES($1,$2,$3)", war["id"], player_id, team)
-            count_after = count + 1
-    return True, f"You joined Team {team}! ({count_after}/{war['team_size']} spots filled)."
+            count_after = await conn.fetchval("SELECT COUNT(*) FROM mining_war_players WHERE war_id=$1 AND team=$2", war["id"], team)
+    return True, f"You registered for Team {team} (applicant #{count_after}). The highest-net-worth {war['team_size']} applicants qualify when the fight starts."
 
 async def war_snapshot(chat_id: int):
     async with get_pool().acquire() as conn:
@@ -48,8 +45,8 @@ async def war_snapshot(chat_id: int):
             FROM mining_war_players mwp JOIN players p ON p.telegram_id=mwp.player_id
             LEFT JOIN player_asset_valuation v ON v.player_id=p.telegram_id
             WHERE mwp.war_id=$1 ORDER BY mwp.team,worth DESC,p.telegram_id""", war["id"])
-        one=[r for r in teams if r["team"]==1]
-        two=[r for r in teams if r["team"]==2]
+        one=[r for r in teams if r["team"]==1][:war["team_size"]]
+        two=[r for r in teams if r["team"]==2][:war["team_size"]]
         return war, one, two, sum(r["worth"] for r in one), sum(r["worth"] for r in two)
 
 async def start_fight(chat_id: int, actor_id: int) -> tuple[bool, str, int | None, int | None]:
@@ -63,19 +60,23 @@ async def start_fight(chat_id: int, actor_id: int) -> tuple[bool, str, int | Non
                 return False,"Only the player who opened this war can start it.",None,None
             counts=await conn.fetch("SELECT team,COUNT(*) AS n FROM mining_war_players WHERE war_id=$1 GROUP BY team",war["id"])
             sizes={r["team"]:r["n"] for r in counts}
-            if sizes.get(1,0)!=war["team_size"] or sizes.get(2,0)!=war["team_size"]:
-                return False,f"Both teams need {war['team_size']} players. Current: Team 1 {sizes.get(1,0)}/{war['team_size']}, Team 2 {sizes.get(2,0)}/{war['team_size']}.",None,None
-            scores=await conn.fetch("""SELECT mwp.team,
-                SUM(p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0)) AS score
+            if sizes.get(1,0)<war["team_size"] or sizes.get(2,0)<war["team_size"]:
+                return False,f"Both teams need at least {war['team_size']} applicants. Current: Team 1 {sizes.get(1,0)}, Team 2 {sizes.get(2,0)}.",None,None
+            scores=await conn.fetch("""WITH ranked AS (
+                SELECT mwp.team,p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0) AS worth,
+                  ROW_NUMBER() OVER (PARTITION BY mwp.team ORDER BY p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0) DESC,p.reputation DESC,p.telegram_id ASC) AS rn
                 FROM mining_war_players mwp JOIN players p ON p.telegram_id=mwp.player_id
-                LEFT JOIN player_asset_valuation v ON v.player_id=p.telegram_id
-                WHERE mwp.war_id=$1 GROUP BY mwp.team ORDER BY mwp.team""",war["id"])
+                LEFT JOIN player_asset_valuation v ON v.player_id=p.telegram_id WHERE mwp.war_id=$1
+            ) SELECT team,SUM(worth) AS score FROM ranked WHERE rn<=$2 GROUP BY team ORDER BY team""",war["id"],war["team_size"])
             s={r["team"]:int(r["score"]) for r in scores}
             # Tie-break: compare each team's highest individual net worth, then reputation total.
             if s[1]==s[2]:
-                tops=await conn.fetch("""SELECT mwp.team,MAX(p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0)) AS top_worth,
-                    SUM(p.reputation) AS reputation FROM mining_war_players mwp JOIN players p ON p.telegram_id=mwp.player_id
-                    LEFT JOIN player_asset_valuation v ON v.player_id=p.telegram_id WHERE mwp.war_id=$1 GROUP BY mwp.team ORDER BY mwp.team""",war["id"])
+                tops=await conn.fetch("""WITH ranked AS (
+                    SELECT mwp.team,p.reputation,p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0) AS worth,
+                      ROW_NUMBER() OVER (PARTITION BY mwp.team ORDER BY p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0) DESC,p.reputation DESC,p.telegram_id ASC) AS rn
+                    FROM mining_war_players mwp JOIN players p ON p.telegram_id=mwp.player_id
+                    LEFT JOIN player_asset_valuation v ON v.player_id=p.telegram_id WHERE mwp.war_id=$1
+                ) SELECT team,MAX(worth) AS top_worth,SUM(reputation) AS reputation FROM ranked WHERE rn<=$2 GROUP BY team ORDER BY team""",war["id"],war["team_size"])
                 t={r["team"]:(int(r["top_worth"]),int(r["reputation"])) for r in tops}
                 winner=1 if t[1]>t[2] else 2 if t[2]>t[1] else 0
             else:
