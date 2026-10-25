@@ -14,6 +14,8 @@ from app.seasons import season_scheduler
 from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry
 from app.clubs import create_club, join_club, my_club, donate_to_club
 from app.wars import net_worth, attack
+from app.employees import send_challenge, accept_challenge
+from app.stocks import quotes, holdings, trade
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN)
@@ -237,7 +239,7 @@ async def help_command(message: Message):
 /club create Name | TAG — create a club
 /club join TAG — join a club
 /donate 1000 — donate to club treasury
-/war TELEGRAM_ID — business war
+/war TELEGRAM_ID — business war\n/stocks — stock market\n/stock buy ECOR 10 — buy shares\n/hire TELEGRAM_ID — send recruitment challenge\n/hireaccept ID — accept recruitment
 /ranking — use the Season ranking button
 
 Seasons last exactly seven days. Temporary cash and business progress reset at settlement; reputation and eligible permanent assets persist.''', reply_markup=main_menu())
@@ -267,6 +269,49 @@ async def ranking_command(message: Message):
     text = '🏆 <b>FOSBU LIST — TOP 10</b>\n\n' + ('\n'.join(f'{i}. {r["display_name"]} — {r["worth"]:,} NW' for i, r in enumerate(rows, 1)) if rows else 'No players yet.')
     await message.answer(text)
 
+
+
+
+@dp.message(Command('stocks'))
+async def stocks_command(message: Message):
+    rows = await quotes()
+    owned = await holdings(message.from_user.id)
+    lines = ['📈 <b>EMPIRE STOCK EXCHANGE</b>', 'Trade: /stock buy ECOR 10 or /stock sell ECOR 2', '']
+    lines.extend(f'<b>{r["symbol"]}</b> — {r["company_name"]}: {r["price"]:,} cash/share' for r in rows)
+    if owned:
+        lines.extend(['', '<b>Your holdings</b>'])
+        lines.extend(f'• {r["symbol"]}: {r["shares"]} shares · value {r["value"]:,}' for r in owned)
+    await message.answer('\n'.join(lines))
+
+
+@dp.message(Command('stock'))
+async def stock_command(message: Message):
+    parts = (message.text or '').split()
+    if len(parts) != 4 or parts[1].lower() not in ('buy','sell') or not parts[3].isdigit():
+        await message.answer('Use /stock buy ECOR 10 or /stock sell ECOR 2. See /stocks.')
+        return
+    ok, result = await trade(message.from_user.id, parts[2], int(parts[3]), parts[1].lower())
+    await message.answer(('✅ ' if ok else '⚠️ ') + result)
+
+
+@dp.message(Command('hire'))
+async def hire_command(message: Message):
+    parts = (message.text or '').split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer('Use /hire TELEGRAM_ID. Board of Directors unlocks at business level 7.')
+        return
+    ok, result = await send_challenge(message.from_user.id, int(parts[1]))
+    await message.answer(('📨 ' if ok else '⚠️ ') + result)
+
+
+@dp.message(Command('hireaccept'))
+async def hire_accept_command(message: Message):
+    parts = (message.text or '').split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer('Use /hireaccept CHALLENGE_ID to accept an employee recruitment challenge.')
+        return
+    ok, result = await accept_challenge(message.from_user.id, int(parts[1]))
+    await message.answer(('✅ ' if ok else '⚠️ ') + result)
 
 
 @dp.callback_query(F.data == 'help_gold')
