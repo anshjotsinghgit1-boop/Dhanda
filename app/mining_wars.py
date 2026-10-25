@@ -15,13 +15,13 @@ async def create_war(chat_id: int, creator_id: int, team_size: int) -> tuple[boo
                 VALUES($1,$2,$3) RETURNING id""", chat_id, creator_id, team_size)
     return True, f"Mining War #{war_id} is open. Recruit {team_size} players on each team.", war_id
 
-async def join_team(chat_id: int, player_id: int, team: int) -> tuple[bool, str]:
+async def join_team(chat_id: int, player_id: int, team: int, war_id: int | None = None) -> tuple[bool, str]:
     if team not in (1,2):
         return False, "Invalid team."
     async with get_pool().acquire() as conn:
         async with conn.transaction():
             war = await conn.fetchrow("""SELECT * FROM group_mining_wars
-                WHERE chat_id=$1 AND status='recruiting' ORDER BY id DESC LIMIT 1 FOR UPDATE""", chat_id)
+                WHERE chat_id=$1 AND status='recruiting' AND ($2::BIGINT IS NULL OR id=$2) ORDER BY id DESC LIMIT 1 FOR UPDATE""", chat_id, war_id)
             if not war:
                 return False, "There is no open mining war in this group."
             player = await conn.fetchrow("SELECT telegram_id FROM players WHERE telegram_id=$1", player_id)
@@ -49,11 +49,11 @@ async def war_snapshot(chat_id: int):
         two=[r for r in teams if r["team"]==2][:war["team_size"]]
         return war, one, two, sum(r["worth"] for r in one), sum(r["worth"] for r in two)
 
-async def start_fight(chat_id: int, actor_id: int) -> tuple[bool, str, int | None, int | None]:
+async def start_fight(chat_id: int, actor_id: int, war_id: int | None = None) -> tuple[bool, str, int | None, int | None]:
     async with get_pool().acquire() as conn:
         async with conn.transaction():
             war=await conn.fetchrow("""SELECT * FROM group_mining_wars
-                WHERE chat_id=$1 AND status='recruiting' ORDER BY id DESC LIMIT 1 FOR UPDATE""",chat_id)
+                WHERE chat_id=$1 AND status='recruiting' AND ($2::BIGINT IS NULL OR id=$2) ORDER BY id DESC LIMIT 1 FOR UPDATE""",chat_id,war_id)
             if not war:
                 return False,"No open mining war to start.",None,None
             if actor_id != war["creator_id"]:
@@ -86,11 +86,11 @@ async def start_fight(chat_id: int, actor_id: int) -> tuple[bool, str, int | Non
         return True,f"Mining War #{war['id']} ended in a draw! Team 1: {s[1]:,} net worth · Team 2: {s[2]:,}.",war["id"],None
     return True,f"Team {winner} wins Mining War #{war['id']}!\n⛏ Team 1 power: {s[1]:,}\n⛏ Team 2 power: {s[2]:,}",war["id"],winner
 
-async def cancel_war(chat_id: int, actor_id: int) -> tuple[bool,str]:
+async def cancel_war(chat_id: int, actor_id: int, war_id: int | None = None) -> tuple[bool,str]:
     async with get_pool().acquire() as conn:
         async with conn.transaction():
-            war=await conn.fetchrow("""SELECT * FROM group_mining_wars WHERE chat_id=$1 AND status='recruiting'
-                ORDER BY id DESC LIMIT 1 FOR UPDATE""",chat_id)
+            war=await conn.fetchrow("""SELECT * FROM group_mining_wars WHERE chat_id=$1 AND status='recruiting' AND ($2::BIGINT IS NULL OR id=$2)
+                ORDER BY id DESC LIMIT 1 FOR UPDATE""",chat_id,war_id)
             if not war:
                 return False,"No recruiting mining war to cancel."
             if actor_id!=war["creator_id"]:
