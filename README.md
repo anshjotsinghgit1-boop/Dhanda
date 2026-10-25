@@ -40,3 +40,14 @@ A text-first Telegram empire simulator built with Python, aiogram 3 and PostgreS
 5. Install requirements and run `python -m app`.
 
 Do not run the bot until all migrations are applied. Keep credentials out of Git. This project is actively being built; live database and Telegram behavior still need staging tests before public launch.
+
+
+## Timed mining and club battle MVP
+
+- Register a group for mining with `/miningwar`. Registered groups receive mining events every two hours.
+- Each event has a five-minute join window and requires at least two players; otherwise the event is skipped.
+- Joined players see opponents and net worth, then choose boxes in four rounds. Money/empty/normal boxes affect temporary battle net worth only.
+- A successful four-money-box run grants a 30% collection-speed boost for two hours. The boost is applied when collecting passive income and does not change base net worth.
+- Players who have started the bot in DM receive hourly club-battle notifications and can join the club queue.
+
+Apply migrations in numerical order through `007_mining_rounds.sql` before starting the bot. This is an initial MVP; full multi-opponent club progression and live end-to-end testing remain follow-up work.
