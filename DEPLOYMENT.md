@@ -10,7 +10,7 @@ Apply these files in order:
 1. `schema.sql`
 2. `migrations/002_seasons.sql`
 3. `migrations/003_full_economy.sql`
-4. `migrations/004_employees_market.sql`
+4. `migrations/004_employees_market.sql`\n5. `migrations/005_group_mining_wars.sql`
 
 The bot now imports the season, asset, club, employee, stock and business-war modules. Do not start it against a database that is missing the corresponding tables and columns. SQL has been committed to GitHub but has **not** been run against your PostgreSQL database.
 
@@ -29,7 +29,7 @@ Install `requirements.txt`, then run `python -m app`. For Docker, build the imag
 ## Still required before public launch
 - Run all migrations against a staging PostgreSQL database and exercise every command end-to-end.
 - Add a real migration runner, rate limits, monitoring, backups, and admin tooling.
-- Complete timed club matchmaking, level-specific economic balancing, full stock price updates, business-war protection/cooldowns, freeze/unfreeze mechanics, and industrial park season pausing/resume.
+- Complete timed club matchmaking, level-specific economic balancing, full stock price updates, business-war protection/cooldowns, freeze/unfreeze mechanics, mining-war reward design and abuse prevention.
 - Add automated unit/integration tests and confirm GitHub Actions succeeds.
 - Review the reward economy and edge cases before public release.
 
