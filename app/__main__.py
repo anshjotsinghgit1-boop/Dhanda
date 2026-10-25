@@ -11,7 +11,7 @@ from app.db import connect, close, get_pool
 from app.economy import register_player, get_player, collect_income, upgrade_business, production_per_minute
 from app.keyboards import main_menu
 from app.seasons import season_scheduler
-from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry
+from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry, resume_industry
 from app.clubs import create_club, join_club, my_club, donate_to_club
 from app.wars import net_worth, attack
 from app.employees import send_challenge, accept_challenge
@@ -179,6 +179,13 @@ async def build_industry_command(message: Message):
     await message.answer(('✅ ' if ok else '⚠️ ') + result)
 
 
+
+@dp.message(Command('resumeindustry'))
+async def resume_industry_command(message: Message):
+    ok, result = await resume_industry(message.from_user.id)
+    await message.answer(('✅ ' if ok else 'ℹ️ ') + result)
+
+
 @dp.message(Command('club'))
 async def club_command(message: Message):
     parts = (message.text or '').split(maxsplit=2)
@@ -232,7 +239,7 @@ async def help_command(message: Message):
 /gold buy 2 — buy 2 grams of gold
 /gold sell 1 — sell 1 gram of gold
 /industry — industrial park catalog
-/buildindustry workshop — buy a building
+/buildindustry workshop — buy a building\n/resumeindustry — resume industry after a season rollover
 /club — view your club
 /club create Name | TAG — create a club
 /club join TAG — join a club
