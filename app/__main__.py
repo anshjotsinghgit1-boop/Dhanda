@@ -17,10 +17,12 @@ from app.wars import net_worth, attack
 from app.employees import send_challenge, accept_challenge
 from app.stocks import quotes, holdings, trade
 from app.mining_wars import create_war, join_team, war_snapshot, start_fight, cancel_war
+from app.timed_events import register_timed_handlers, timed_scheduler, register_mining_group
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
+register_timed_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
 @dp.message(F.chat.type.in_({"group", "supergroup"}), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"))
@@ -153,14 +155,8 @@ async def mining_war_command(message: Message):
         await message.answer("Start mining from inside a Telegram group.")
         return
     await register_player(message.from_user)
-    ok, result, war_id = await create_war(message.chat.id, message.from_user.id, 5)
-    if not ok:
-        await message.answer("⚠️ " + result)
-        return
-    text, markup = await mining_text(message.chat.id)
-    sent = await message.answer(text, reply_markup=markup)
-    async with get_pool().acquire() as conn:
-        await conn.execute("UPDATE group_mining_wars SET message_id=$1 WHERE id=$2", sent.message_id, war_id)
+    await register_mining_group(message.chat.id, message.chat.title or 'Mining group')
+    await message.answer('✅ This group is registered for EMPIRE CENTURY mining. Events open automatically every 2 hours with a 5-minute joining window. At least 2 players must join; otherwise this group skips that event.')
 
 
 @dp.message(Command("miningstatus"))
@@ -460,12 +456,14 @@ async def help_club(callback: CallbackQuery):
 async def main():
     await connect()
     season_task = asyncio.create_task(season_scheduler(), name='season-scheduler')
+    timed_task = asyncio.create_task(timed_scheduler(bot), name='timed-events-scheduler')
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
     finally:
         season_task.cancel()
-        await asyncio.gather(season_task, return_exceptions=True)
+        timed_task.cancel()
+        await asyncio.gather(season_task, timed_task, return_exceptions=True)
         await close()
         await bot.session.close()
 
