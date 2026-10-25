@@ -39,8 +39,7 @@ async def attack(attacker_id: int, defender_id: int) -> tuple[bool, str]:
                 await conn.execute("UPDATE players SET gold_grams=GREATEST(0,gold_grams-1),determination=LEAST(2000,determination+100) WHERE telegram_id=$1", defender_id)
             else:
                 await conn.execute("UPDATE players SET determination=LEAST(2000,determination+100) WHERE telegram_id=$1", attacker_id)
-                if winner == defender_id:
-                    await conn.execute("UPDATE players SET gold_grams=gold_grams+1 WHERE telegram_id=$1", defender_id)
+                # Defender wins without a gold bonus or determination change.
             await conn.execute("""INSERT INTO business_wars(attacker_id,defender_id,winner_id,attacker_score,defender_score,gold_delta)
                 VALUES($1,$2,$3,$4,$5,$6)""", attacker_id, defender_id, winner, a_score, d_score, gold_delta)
     if winner is None:
