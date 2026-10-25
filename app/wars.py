@@ -6,9 +6,7 @@ async def net_worth(player_id: int) -> int:
         p = await conn.fetchrow("SELECT cash,stocks,gold_grams,reputation FROM players WHERE telegram_id=$1", player_id)
         if not p:
             return 0
-        assets = await conn.fetchval("""SELECT COALESCE(SUM(c.net_worth*a.quantity),0)
-            FROM player_assets a JOIN asset_catalog c ON c.id=a.asset_id
-            WHERE a.player_id=$1""", player_id)
+        assets = await conn.fetchval("SELECT COALESCE(asset_value,0) FROM player_asset_valuation WHERE player_id=$1", player_id) or 0
         return int(p["cash"] + p["stocks"] + p["gold_grams"] * 10 + assets)
 
 async def attack(attacker_id: int, defender_id: int) -> tuple[bool, str]:
@@ -22,8 +20,8 @@ async def attack(attacker_id: int, defender_id: int) -> tuple[bool, str]:
                 return False, "Both players must have started the game."
             if attacker["frozen"] or defender["frozen"]:
                 return False, "A player is frozen and cannot enter a business war."
-            a_assets = await conn.fetchval("SELECT COALESCE(SUM(c.net_worth*x.quantity),0) FROM player_assets x JOIN asset_catalog c ON c.id=x.asset_id WHERE x.player_id=$1", attacker_id)
-            d_assets = await conn.fetchval("SELECT COALESCE(SUM(c.net_worth*x.quantity),0) FROM player_assets x JOIN asset_catalog c ON c.id=x.asset_id WHERE x.player_id=$1", defender_id)
+            a_assets = await conn.fetchval("SELECT COALESCE(asset_value,0) FROM player_asset_valuation WHERE player_id=$1", attacker_id) or 0
+            d_assets = await conn.fetchval("SELECT COALESCE(asset_value,0) FROM player_asset_valuation WHERE player_id=$1", defender_id) or 0
             a_score = int(attacker["cash"] + attacker["stocks"] + attacker["gold_grams"]*10 + a_assets + attacker["determination"])
             d_score = int(defender["cash"] + defender["stocks"] + defender["gold_grams"]*10 + d_assets + defender["determination"])
             winner = attacker_id if a_score > d_score else defender_id if d_score > a_score else None
