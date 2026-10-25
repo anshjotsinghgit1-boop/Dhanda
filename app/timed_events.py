@@ -9,6 +9,10 @@ log = logging.getLogger(__name__)
 MINING_INTERVAL = 7200
 CLUB_INTERVAL = 3600
 
+async def register_mining_group(chat_id: int, title: str):
+    async with get_pool().acquire() as conn:
+        await conn.execute('INSERT INTO mining_groups(chat_id,title) VALUES($1,$2) ON CONFLICT(chat_id) DO UPDATE SET title=EXCLUDED.title', chat_id, (title or 'Mining group')[:120])
+
 def join_kb(event_id):
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⛏ JOIN MINING", callback_data=f"tmj_{event_id}")]])
 
