@@ -127,11 +127,11 @@ async def mining_text(chat_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
         return "No active mining session in this group. Start one with /miningwar.", None
     lines = [f'• {p["display_name"]} — 💎 {p["worth"]:,} NW' for p in miners]
     status = war["status"]
-    text = (f'⛏ <b>EMPIRE CENTURY — MINING #{war["id"]}</b>\\n'
-            f'Status: <b>{status.title()}</b>\\n'
-            f'Applicants: <b>{len(miners)}</b>\\n\\n'
-            + ('\\n'.join(lines) if lines else 'No miners have joined yet.')
-            + '\\n\\nAt start: 3 highest-net-worth miners qualify with 3–4 applicants; '
+    text = (f'⛏ <b>EMPIRE CENTURY — MINING #{war["id"]}</b>\n'
+            f'Status: <b>{status.title()}</b>\n'
+            f'Applicants: <b>{len(miners)}</b>\n\n'
+            + ('\n'.join(lines) if lines else 'No miners have joined yet.')
+            + '\n\nAt start: 3 highest-net-worth miners qualify with 3–4 applicants; '
               '5 qualify with 5 or more applicants. Minimum 3 applicants.')
     return text, mining_keyboard(war["id"], status)
 
@@ -190,7 +190,7 @@ async def mining_start_callback(callback: CallbackQuery):
         return
     ok, result, resolved_id, winner = await start_fight(callback.message.chat.id, callback.from_user.id, war_id)
     if ok:
-        await callback.message.edit_text("⛏ <b>MINING RESULTS</b>\\n\\n" + result)
+        await callback.message.edit_text("⛏ <b>MINING RESULTS</b>\n\n" + result)
     await callback.answer(result if len(result) < 180 else "Mining completed.", show_alert=not ok)
 
 
