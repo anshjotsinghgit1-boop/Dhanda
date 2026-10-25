@@ -75,7 +75,7 @@ async def buy_industrial_building(player_id: int, building_key: str) -> tuple[bo
             await conn.execute("UPDATE players SET cash=cash-$1 WHERE telegram_id=$2", b["price"], player_id)
             await conn.execute("""INSERT INTO player_industries(player_id,building_id,quantity,last_settled_at)
                 VALUES($1,$2,1,NOW()) ON CONFLICT(player_id,building_id)
-                DO UPDATE SET quantity=player_industries.quantity+1""", player_id, b["id"])
+                DO UPDATE SET quantity=player_industries.quantity+1,active=TRUE,last_settled_at=NOW()""", player_id, b["id"])
     return True, f"Built {b['name']}. It generates {b['reputation_per_hour']:,} reputation/hour and adds {b['operation_bonus']} operation bonus."
 
 async def settle_industry(player_id: int) -> int:
@@ -85,7 +85,7 @@ async def settle_industry(player_id: int) -> int:
         async with conn.transaction():
             rows = await conn.fetch("""SELECT pi.building_id,pi.quantity,pi.last_settled_at,b.reputation_per_hour
                 FROM player_industries pi JOIN industrial_buildings b ON b.id=pi.building_id
-                WHERE pi.player_id=$1 FOR UPDATE OF pi""", player_id)
+                WHERE pi.player_id=$1 AND pi.active=TRUE FOR UPDATE OF pi""", player_id)
             now = datetime.now(timezone.utc)
             for row in rows:
                 hours = max(0, int((now-row["last_settled_at"]).total_seconds() // 3600))
@@ -96,3 +96,13 @@ async def settle_industry(player_id: int) -> int:
             if total:
                 await conn.execute("UPDATE players SET reputation=reputation+$1 WHERE telegram_id=$2", total, player_id)
     return total
+
+async def resume_industry(player_id: int) -> tuple[bool, str]:
+    async with get_pool().acquire() as conn:
+        result = await conn.execute(
+            "UPDATE player_industries SET active=TRUE,last_settled_at=NOW() WHERE player_id=$1 AND active=FALSE",
+            player_id,
+        )
+    if result.endswith("0"):
+        return False, "You have no paused industrial buildings to resume."
+    return True, "Industrial Park resumed. Reputation generation has restarted."
