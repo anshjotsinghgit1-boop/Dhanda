@@ -31,3 +31,10 @@ INSERT INTO stock_market(symbol,company_name,price,volatility_pct) VALUES
  ('VYBE','Vybe Consumer Group',120,10),
  ('AURA','Aura Luxury Holdings',900,6)
 ON CONFLICT(symbol) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS player_stock_holdings (
+  player_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+  symbol TEXT NOT NULL REFERENCES stock_market(symbol),
+  shares INTEGER NOT NULL DEFAULT 0 CHECK(shares >= 0),
+  PRIMARY KEY(player_id,symbol)
+);
