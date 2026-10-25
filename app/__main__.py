@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
@@ -16,6 +16,7 @@ from app.clubs import create_club, join_club, my_club, donate_to_club
 from app.wars import net_worth, attack
 from app.employees import send_challenge, accept_challenge
 from app.stocks import quotes, holdings, trade
+from app.mining_wars import create_war, join_team, war_snapshot, start_fight, cancel_war
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN)
@@ -106,6 +107,120 @@ async def ranking(callback: CallbackQuery):
             for i, r in enumerate(rows, 1))
     await callback.message.answer(text, reply_markup=main_menu())
     await callback.answer()
+
+
+
+def mining_keyboard(war_id: int, status: str, team_size: int) -> InlineKeyboardMarkup:
+    if status == "recruiting":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⛏ Join Team 1", callback_data=f"mine_join_1_{war_id}"),
+             InlineKeyboardButton(text="⛏ Join Team 2", callback_data=f"mine_join_2_{war_id}")],
+            [InlineKeyboardButton(text="⚔️ FIGHT", callback_data=f"mine_start_{war_id}"),
+             InlineKeyboardButton(text="🔄 Refresh", callback_data=f"mine_refresh_{war_id}")],
+            [InlineKeyboardButton(text="✖ Cancel war", callback_data=f"mine_cancel_{war_id}")],
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data=f"mine_refresh_{war_id}")] ])
+
+
+async def mining_text(chat_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
+    war, team1, team2, score1, score2 = await war_snapshot(chat_id)
+    if not war:
+        return "No active mining war in this group.", None
+    def member_line(p):
+        return f'• {p["display_name"]} — 💎 {p["worth"]:,}'
+    team1_text = "\\n".join(member_line(p) for p in team1) or "— no miners yet —"
+    team2_text = "\\n".join(member_line(p) for p in team2) or "— no miners yet —"
+    status = war["status"]
+    text = (f'⛏ <b>EMPIRE CENTURY — MINING WAR #{war["id"]}</b>\\n'
+            f'Status: <b>{status.title()}</b> · {war["team_size"]} miners per team\\n\\n'
+            f'🟦 <b>TEAM 1 ({len(team1)}/{war["team_size"]})</b>\\n{team1_text}\\n'
+            f'Power: <b>{score1:,}</b>\\n\\n'
+            f'🟥 <b>TEAM 2 ({len(team2)}/{war["team_size"]})</b>\\n{team2_text}\\n'
+            f'Power: <b>{score2:,}</b>\\n\\n'
+            'Only registered players can join. When both teams are full, the creator presses FIGHT. Team power is the combined net worth.')
+    return text, mining_keyboard(war["id"], status, war["team_size"])
+
+
+@dp.message(Command("miningwar"))
+async def mining_war_command(message: Message):
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Start a mining war from inside a Telegram group.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 2 or parts[1] not in ("3", "5"):
+        await message.answer("Use /miningwar 3 or /miningwar 5 to open one group mining war.")
+        return
+    await register_player(message.from_user)
+    ok, result, war_id = await create_war(message.chat.id, message.from_user.id, int(parts[1]))
+    if not ok:
+        await message.answer("⚠️ " + result)
+        return
+    text, markup = await mining_text(message.chat.id)
+    sent = await message.answer(text, reply_markup=markup)
+    async with get_pool().acquire() as conn:
+        await conn.execute("UPDATE group_mining_wars SET message_id=$1 WHERE id=$2", sent.message_id, war_id)
+
+
+@dp.message(Command("miningstatus"))
+async def mining_status_command(message: Message):
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Use /miningstatus in the group where the war is running.")
+        return
+    text, markup = await mining_text(message.chat.id)
+    await message.answer(text, reply_markup=markup)
+
+
+@dp.callback_query(F.data.startswith("mine_join_"))
+async def mining_join_callback(callback: CallbackQuery):
+    try:
+        _, _, team_s, war_s = callback.data.split("_")
+        team, war_id = int(team_s), int(war_s)
+    except (ValueError, AttributeError):
+        await callback.answer("Invalid team button.", show_alert=True)
+        return
+    if callback.message.chat.type not in ("group", "supergroup"):
+        await callback.answer("Join from the mining war's group.", show_alert=True)
+        return
+    ok, result = await join_team(callback.message.chat.id, callback.from_user.id, team)
+    if ok:
+        text, markup = await mining_text(callback.message.chat.id)
+        try:
+            await callback.message.edit_text(text, reply_markup=markup)
+        except Exception:
+            pass
+    await callback.answer(result, show_alert=not ok)
+
+
+@dp.callback_query(F.data.startswith("mine_start_"))
+async def mining_start_callback(callback: CallbackQuery):
+    try:
+        war_id = int(callback.data.rsplit("_", 1)[1])
+    except (ValueError, AttributeError):
+        await callback.answer("Invalid war button.", show_alert=True)
+        return
+    ok, result, resolved_id, winner = await start_fight(callback.message.chat.id, callback.from_user.id)
+    if ok:
+        text, _ = await mining_text(callback.message.chat.id)
+        await callback.message.edit_text(text + "\\n\\n" + result)
+    await callback.answer(result if len(result) < 180 else "Battle resolved.", show_alert=not ok)
+
+
+@dp.callback_query(F.data.startswith("mine_refresh_"))
+async def mining_refresh_callback(callback: CallbackQuery):
+    text, markup = await mining_text(callback.message.chat.id)
+    try:
+        await callback.message.edit_text(text, reply_markup=markup)
+    except Exception:
+        pass
+    await callback.answer("Mining war refreshed.")
+
+
+@dp.callback_query(F.data.startswith("mine_cancel_"))
+async def mining_cancel_callback(callback: CallbackQuery):
+    ok, result = await cancel_war(callback.message.chat.id, callback.from_user.id)
+    if ok:
+        await callback.message.edit_text("✖ " + result)
+    await callback.answer(result, show_alert=not ok)
 
 
 @dp.message(Command('gold'))
@@ -244,7 +359,7 @@ async def help_command(message: Message):
 /club create Name | TAG — create a club
 /club join TAG — join a club
 /donate 1000 — donate to club treasury
-/war TELEGRAM_ID — business war\n/stocks — stock market\n/stock buy ECOR 10 — buy shares\n/hire TELEGRAM_ID — send recruitment challenge\n/hireaccept ID — accept recruitment
+/war TELEGRAM_ID — direct business war\n/miningwar 3 or /miningwar 5 — group mining war\n/miningstatus — refresh group war\n/stocks — stock market\n/stock buy ECOR 10 — buy shares\n/hire TELEGRAM_ID — send recruitment challenge\n/hireaccept ID — accept recruitment
 /ranking — use the Season ranking button
 
 Seasons last exactly seven days. Temporary cash and business progress reset at settlement; reputation and eligible permanent assets persist.''', reply_markup=main_menu())
