@@ -25,7 +25,7 @@ async def get_player(telegram_id: int):
         return await conn.fetchrow('SELECT * FROM players WHERE telegram_id=$1', telegram_id)
 
 async def collect_income(telegram_id: int) -> tuple[int, int]:
-    """Atomically collect capped passive income and apply 5% boss share."""
+    """Collect capped passive income, applying any active temporary mining boost."""
     async with get_pool().acquire() as conn:
         async with conn.transaction():
             player = await conn.fetchrow('SELECT * FROM players WHERE telegram_id=$1 FOR UPDATE', telegram_id)
@@ -33,14 +33,19 @@ async def collect_income(telegram_id: int) -> tuple[int, int]:
                 return 0, 0
             now = datetime.now(timezone.utc)
             elapsed = max(0, min((now - player['last_collected_at']).total_seconds(), OFFLINE_CAP_SECONDS))
-            gross = int(elapsed // 60) * production_per_minute(player['business_level'])
+            base = int(elapsed // 60) * production_per_minute(player['business_level'])
+            boost = float(player['collection_boost'] or 1.0)
+            if player['collection_boost_until'] is None or player['collection_boost_until'] <= now:
+                boost = 1.0
+                await conn.execute('UPDATE players SET collection_boost=1.0,collection_boost_until=NULL WHERE telegram_id=$1', telegram_id)
+            gross = int(base * boost)
             boss_share = 0
             employee = await conn.fetchrow('SELECT boss_id FROM employees WHERE employee_id=$1', telegram_id)
             if employee and gross > 0:
                 boss_share = gross * 5 // 100
                 gross -= boss_share
                 await conn.execute('UPDATE players SET cash=cash+$1 WHERE telegram_id=$2', boss_share, employee['boss_id'])
-            await conn.execute('UPDATE players SET cash=cash+$1, last_collected_at=$2 WHERE telegram_id=$3', gross, now, telegram_id)
+            await conn.execute('UPDATE players SET cash=cash+$1,last_collected_at=$2 WHERE telegram_id=$3', gross, now, telegram_id)
             return gross, boss_share
 
 async def upgrade_business(telegram_id: int) -> tuple[bool, str]:
