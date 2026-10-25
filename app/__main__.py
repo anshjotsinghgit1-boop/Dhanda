@@ -268,6 +268,31 @@ async def ranking_command(message: Message):
     await message.answer(text)
 
 
+
+@dp.callback_query(F.data == 'help_gold')
+async def help_gold(callback: CallbackQuery):
+    await callback.message.answer('🪙 <b>Gold Exchange</b>\nRate: 1,000 cash per gram.\nBuy: /gold buy 2\nSell: /gold sell 1')
+    await callback.answer()
+
+
+@dp.callback_query(F.data == 'help_assets')
+async def help_assets(callback: CallbackQuery):
+    await callback.message.answer('🏬 Browse /assetshop, buy using /buyasset sports_car, and check your collection with /inventory.')
+    await callback.answer()
+
+
+@dp.callback_query(F.data == 'help_industry')
+async def help_industry(callback: CallbackQuery):
+    await callback.message.answer('🏭 View buildings with /industry and buy one with /buildindustry workshop. Buildings generate reputation over time.')
+    await callback.answer()
+
+
+@dp.callback_query(F.data == 'help_club')
+async def help_club(callback: CallbackQuery):
+    await callback.message.answer('🏰 /club — view your club\n/club create Empire Crew | EC\n/club join EC\n/donate 1000')
+    await callback.answer()
+
+
 async def main():
     await connect()
     season_task = asyncio.create_task(season_scheduler(), name='season-scheduler')
