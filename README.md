@@ -15,7 +15,7 @@ A text-first Telegram empire simulator built with Python, aiogram 3 and PostgreS
 - Board of Directors recruiting unlocks at level 7. A boss starts with three employee slots; VIP level 5 adds two. Recruiting requires the target to accept. Employees pay a 5% share of eligible collected income to their boss.
 - Top 50 season finishers are marked for permanent reward eligibility and receive a unique permanent reward asset.
 
-## Commands
+## Group mining wars\n- In any Telegram group, use `/miningwar 3` or `/miningwar 5` to open the group's only active mining war.\n- Players register for Team 1 or Team 2 with inline buttons. Each player must first use `/start` with the bot.\n- Teams can have multiple applicants; when the creator presses **FIGHT**, the highest-net-worth 3 or 5 applicants on each side qualify. Combined selected-player net worth decides the winner, with top individual net worth and reputation as tie-breakers.\n- Use `/miningstatus` to refresh the group board. The creator can cancel the lobby before the fight.\n\n## Commands
 - `/start`, `/empire`, `/collect`, `/ranking`
 - `/assetshop`, `/buyasset sports_car`, `/inventory`
 - `/gold buy 2`, `/gold sell 1`
