@@ -74,13 +74,17 @@ async def settle_expired_season() -> bool:
                    RETURNING id""",
                 SEASON_DAYS,
             )
-            # Preserve reputation and permanent_assets. Reset the temporary business cycle.
+            # Preserve reputation and eligible permanent assets; reset temporary season wealth.
             await conn.execute(
-                """UPDATE players SET cash = 1000, business_level = 1,
-                   last_collected_at = NOW(), season_id = $1""",
+                """UPDATE players SET cash=1000, stocks=0, gold_grams=0, business_level=1,
+                   last_collected_at=NOW(), season_id=$1""",
                 next_season["id"],
             )
-            # Employees are temporary season relationships and must not survive the reset.
+            await conn.execute("DELETE FROM player_assets WHERE permanent=FALSE")
+            await conn.execute("DELETE FROM player_stock_holdings")
+            # Industrial buildings remain owned but pause until their owner resumes them.
+            await conn.execute("UPDATE player_industries SET active=FALSE,last_settled_at=NOW()")
+            # Employee relationships are temporary and do not survive the reset.
             await conn.execute("DELETE FROM employees")
             log.info("Settled season %s; started season %s; snapshotted %s players",
                      season["id"], next_season["id"], len(players))
