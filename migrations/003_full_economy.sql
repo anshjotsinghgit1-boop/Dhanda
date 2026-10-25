@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS player_industries (
   player_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
   building_id BIGINT NOT NULL REFERENCES industrial_buildings(id),
   quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  active BOOLEAN NOT NULL DEFAULT TRUE,
   last_settled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY(player_id, building_id)
 );
