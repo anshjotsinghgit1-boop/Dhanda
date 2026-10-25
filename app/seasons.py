@@ -35,11 +35,7 @@ async def settle_expired_season() -> bool:
                           p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)
                           +COALESCE(a.asset_value,0) AS net_worth
                    FROM players p
-                   LEFT JOIN (
-                     SELECT pa.player_id,SUM(ac.net_worth*pa.quantity) AS asset_value
-                     FROM player_assets pa JOIN asset_catalog ac ON ac.id=pa.asset_id
-                     GROUP BY pa.player_id
-                   ) a ON a.player_id=p.telegram_id
+                   LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
                    WHERE p.season_id=$1
                    ORDER BY net_worth DESC,COALESCE(a.asset_value,0) DESC,p.stocks DESC,p.cash DESC,p.telegram_id ASC""",
                 season["id"],
