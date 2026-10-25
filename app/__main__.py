@@ -22,6 +22,17 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
+# Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
+@dp.message(F.chat.type.in_({"group", "supergroup"}), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"))
+async def group_mining_only_guard(message: Message):
+    await message.answer("⛏ This group is for mining only. Use /miningwar to open a mining lobby; use the bot in private chat for all other game features.")
+
+
+@dp.callback_query(F.message.chat.type.in_({"group", "supergroup"}), ~F.data.startswith("mine_"))
+async def group_non_mining_button_guard(callback: CallbackQuery):
+    await callback.answer("Only mining buttons work in group chats. Open the bot in private chat for other features.", show_alert=True)
+
+
 
 def dashboard_text(p, worth: int | None = None) -> str:
     extra = f'\n🏆 Net worth: <b>{worth:,}</b>' if worth is not None else ''
@@ -213,20 +224,6 @@ async def mining_cancel_callback(callback: CallbackQuery):
 
 
 # Group chats are reserved for mining only; the full empire interface is private-chat only.
-@dp.message(F.chat.type.in_({"group", "supergroup"}))
-async def group_mining_only_guard(message: Message):
-    text = (message.text or "").split(maxsplit=1)
-    command = text[0].split("@", 1)[0].lower() if text else ""
-    if command in {"/miningwar", "/miningstatus"}:
-        return
-    await message.answer("⛏ This group is for mining only. Use /miningwar to open a mining lobby; use the bot in private chat for all other game features.")
-
-
-@dp.callback_query(F.message.chat.type.in_({"group", "supergroup"}), ~F.data.startswith("mine_"))
-async def group_non_mining_button_guard(callback: CallbackQuery):
-    await callback.answer("Only mining buttons work in group chats. Open the bot in private chat for other features.", show_alert=True)
-
-
 @dp.message(Command('gold'))
 async def gold_command(message: Message):
     parts = (message.text or '').split()
