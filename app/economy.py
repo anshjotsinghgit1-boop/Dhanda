@@ -14,8 +14,8 @@ async def register_player(user) -> None:
     name = (user.full_name or 'Player')[:80]
     async with get_pool().acquire() as conn:
         await conn.execute('''
-            INSERT INTO players (telegram_id, username, display_name)
-            VALUES ($1, $2, $3)
+            INSERT INTO players (telegram_id, username, display_name, season_id)
+            VALUES ($1, $2, $3, COALESCE((SELECT id FROM seasons WHERE settled_at IS NULL ORDER BY id DESC LIMIT 1), 1))
             ON CONFLICT (telegram_id) DO UPDATE SET username = EXCLUDED.username,
               display_name = EXCLUDED.display_name
         ''', user.id, user.username, name)
