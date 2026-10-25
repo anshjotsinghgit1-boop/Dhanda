@@ -181,7 +181,7 @@ async def mining_join_callback(callback: CallbackQuery):
     if callback.message.chat.type not in ("group", "supergroup"):
         await callback.answer("Join from the mining war's group.", show_alert=True)
         return
-    ok, result = await join_team(callback.message.chat.id, callback.from_user.id, team)
+    ok, result = await join_team(callback.message.chat.id, callback.from_user.id, team, war_id)
     if ok:
         text, markup = await mining_text(callback.message.chat.id)
         try:
@@ -198,10 +198,9 @@ async def mining_start_callback(callback: CallbackQuery):
     except (ValueError, AttributeError):
         await callback.answer("Invalid war button.", show_alert=True)
         return
-    ok, result, resolved_id, winner = await start_fight(callback.message.chat.id, callback.from_user.id)
+    ok, result, resolved_id, winner = await start_fight(callback.message.chat.id, callback.from_user.id, war_id)
     if ok:
-        text, _ = await mining_text(callback.message.chat.id)
-        await callback.message.edit_text(text + "\\n\\n" + result)
+        await callback.message.edit_text("⚔️ <b>MINING WAR RESULT</b>\\n\\n" + result)
     await callback.answer(result if len(result) < 180 else "Battle resolved.", show_alert=not ok)
 
 
@@ -217,7 +216,7 @@ async def mining_refresh_callback(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("mine_cancel_"))
 async def mining_cancel_callback(callback: CallbackQuery):
-    ok, result = await cancel_war(callback.message.chat.id, callback.from_user.id)
+    ok, result = await cancel_war(callback.message.chat.id, callback.from_user.id, int(callback.data.rsplit('_', 1)[1]))
     if ok:
         await callback.message.edit_text("✖ " + result)
     await callback.answer(result, show_alert=not ok)
