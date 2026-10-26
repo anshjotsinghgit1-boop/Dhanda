@@ -30,7 +30,7 @@ dp = Dispatcher()
 register_timed_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
-@dp.message(F.chat.type.in_({"group", "supergroup"}), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"))
+@dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"))
 async def group_mining_only_guard(message: Message):
     await message.answer("⛏ This group is for mining only. Use /miningwar to open a mining lobby; use the bot in private chat for all other game features.")
 
