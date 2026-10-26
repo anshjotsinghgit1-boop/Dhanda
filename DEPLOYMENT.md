@@ -1,36 +1,14 @@
-# Deployment checklist
+# Local Termux run guide
 
-## Required services
-- A Telegram bot token from BotFather
-- PostgreSQL database
-- A host that can run a persistent Python process or Docker container
+This project is configured to use a local SQLite file for the current Termux build. No PostgreSQL server or hosted database is required.
 
-## Database setup — when you are ready
-Apply these files in order:
-1. `schema.sql`
-2. `migrations/002_seasons.sql`
-3. `migrations/003_full_economy.sql`
-4. `migrations/004_employees_market.sql`\n5. `migrations/005_group_mining_wars.sql`
+1. Install Termux packages: `pkg install python git`
+2. In the repository: `python -m venv .venv && source .venv/bin/activate`
+3. Install dependencies: `python -m pip install -r requirements.txt`
+4. Copy and edit environment settings: `cp .env.example .env && nano .env`
+5. Set `BOT_TOKEN` from BotFather. Keep it secret.
+6. Run: `python -m app`
 
-The bot now imports the season, asset, club, employee, stock and business-war modules. Do not start it against a database that is missing the corresponding tables and columns. SQL has been committed to GitHub but has **not** been run against your PostgreSQL database.
+The database file is created at `data/dhanda.sqlite3` automatically. Back up that file to preserve local game progress. Android battery/background restrictions can stop Termux and therefore stop the bot.
 
-## Environment
-Set `BOT_TOKEN` and `DATABASE_URL` from your host's secret/environment-variable settings. Do not upload `.env` to GitHub.
-
-## Run
-Install `requirements.txt`, then run `python -m app`. For Docker, build the image and pass the two environment variables at runtime.
-
-## Current mechanics
-- Seven-day season scheduler snapshots net-worth rankings, marks the top 50 eligible, grants a unique permanent inventory reward, resets cash to 1,000 and business level to 1, and preserves reputation and permanent assets.
-- Net worth includes cash, stocks, gold grams × 10 and asset value; permanent asset valuation is capped at 25,000 in aggregate.
-- Passive income is capped at eight hours. Employee share is 5% of eligible collected income.
-- Gold exchange, asset shop/inventory, industrial buildings, stock trades, clubs/treasury donations, recruitment challenges and business-war resolution are wired into Telegram commands.
-
-## Still required before public launch
-- Run all migrations against a staging PostgreSQL database and exercise every command end-to-end.
-- Add a real migration runner, rate limits, monitoring, backups, and admin tooling.
-- Complete timed club matchmaking, level-specific economic balancing, full stock price updates, business-war protection/cooldowns, freeze/unfreeze mechanics, mining-war reward design and abuse prevention.
-- Add automated unit/integration tests and confirm GitHub Actions succeeds.
-- Review the reward economy and edge cases before public release.
-
-This is a development build. The code is committed to `main`, but live Telegram and PostgreSQL behavior has not been verified.
+The SQLite adapter is a compatibility conversion; test the bot on-device before relying on all game modules.
