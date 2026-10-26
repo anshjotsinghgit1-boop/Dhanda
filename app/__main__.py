@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import json
+import random
 from decimal import Decimal, InvalidOperation
 
 from aiogram import Bot, Dispatcher, F
@@ -15,7 +17,8 @@ from app.keyboards import main_menu
 from app.seasons import season_scheduler
 from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry, resume_industry
 from app.clubs import create_club, join_club, my_club, donate_to_club
-from app.wars import net_worth, attack
+from app.wars import net_worth
+from app.box_battles import new_layout, save_layout, random_layout
 from app.employees import send_challenge, accept_challenge
 from app.stocks import quotes, holdings, trade
 from app.mining_wars import create_war, join_team, war_snapshot, start_fight, cancel_war
@@ -32,7 +35,7 @@ async def group_mining_only_guard(message: Message):
     await message.answer("⛏ This group is for mining only. Use /miningwar to open a mining lobby; use the bot in private chat for all other game features.")
 
 
-@dp.callback_query(F.message.chat.type.in_({"group", "supergroup"}), ~F.data.startswith("mine_"))
+@dp.callback_query(F.message.chat.type.in_({"group", "supergroup"}), ~F.data.startswith("mine_"), ~F.data.startswith("box_"))
 async def group_non_mining_button_guard(callback: CallbackQuery):
     await callback.answer("Only mining buttons work in group chats. Open the bot in private chat for other features.", show_alert=True)
 
@@ -394,14 +397,132 @@ async def donate_command(message: Message):
     await message.answer(('✅ ' if ok else '⚠️ ') + result)
 
 
+def battle_keyboard(battle_id, picked=None):
+    picked = set(picked or [])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=("⬛" if n not in picked else "✓"), callback_data=f"box_b_{battle_id}_{n}") for n in range(start, start+3)]
+        for start in (1,4,7)
+    ])
+
+def setup_keyboard(slot, items):
+    icons = {"money":"💰","normal":"⚪","empty":"🕳"}
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"{n} {icons[items[n-1]]}", callback_data=f"box_s_{slot}_{n}") for n in range(start,start+3)]
+        for start in (1,4,7)
+    ] + [[InlineKeyboardButton(text="💾 Save layout", callback_data=f"box_save_{slot}")] ])
+
+@dp.message(Command("boxes"))
+async def boxes_command(message: Message):
+    if message.chat.type != "private":
+        await message.answer("Set up your boxes in a private chat with the bot.")
+        return
+    parts=(message.text or "").split()
+    slot=int(parts[1]) if len(parts)>1 and parts[1].isdigit() else 1
+    if slot not in range(1,6):
+        await message.answer("Choose layout slot 1–5: /boxes 1")
+        return
+    async with get_pool().acquire() as conn:
+        row=await conn.fetchrow("SELECT outcomes FROM box_layouts WHERE player_id=$1 AND layout_no=$2",message.from_user.id,slot)
+        draft=await conn.fetchrow("SELECT outcomes FROM box_layout_drafts WHERE player_id=$1 AND layout_no=$2",message.from_user.id,slot)
+    items=json.loads(row["outcomes"]) if row else json.loads(draft["outcomes"]) if draft else new_layout()
+    async with get_pool().acquire() as conn:
+        await conn.execute("INSERT INTO box_layout_drafts(player_id,layout_no,outcomes) VALUES($1,$2,$3) ON CONFLICT(player_id,layout_no) DO UPDATE SET outcomes=excluded.outcomes",message.from_user.id,slot,json.dumps(items))
+    await message.answer(f"🎭 <b>BOX SETUP · LAYOUT {slot}/5</b>\nTap boxes to cycle Money → Normal → Empty. Save only when there are exactly 3 of each.",reply_markup=setup_keyboard(slot,items))
+
+@dp.callback_query(F.data.startswith("box_s_"))
+async def box_setup_click(c: CallbackQuery):
+    _,_,slot_s,n_s=c.data.split("_")
+    slot,n=int(slot_s),int(n_s)
+    async with get_pool().acquire() as conn:
+        row=await conn.fetchrow("SELECT outcomes FROM box_layout_drafts WHERE player_id=$1 AND layout_no=$2",c.from_user.id,slot)
+    if not row:
+        await c.answer("Run /boxes first.",show_alert=True); return
+    items=json.loads(row["outcomes"])
+    items[n-1]={"money":"normal","normal":"empty","empty":"money"}[items[n-1]]
+    async with get_pool().acquire() as conn:
+        await conn.execute("UPDATE box_layout_drafts SET outcomes=$1 WHERE player_id=$2 AND layout_no=$3",json.dumps(items),c.from_user.id,slot)
+    await c.message.edit_reply_markup(reply_markup=setup_keyboard(slot,items))
+    counts=" · ".join(f"{k.title()}: {items.count(k)}" for k in ("money","normal","empty"))
+    await c.answer(counts)
+
+@dp.callback_query(F.data.startswith("box_save_"))
+async def box_setup_save(c: CallbackQuery):
+    slot=int(c.data.rsplit("_",1)[1])
+    async with get_pool().acquire() as conn:
+        row=await conn.fetchrow("SELECT outcomes FROM box_layout_drafts WHERE player_id=$1 AND layout_no=$2",c.from_user.id,slot)
+    if not row:
+        await c.answer("Run /boxes first.",show_alert=True); return
+    items=json.loads(row["outcomes"])
+    if not await save_layout(c.from_user.id,slot,items):
+        await c.answer("Need exactly 3 Money, 3 Normal, and 3 Empty boxes.",show_alert=True); return
+    await c.answer(f"Layout {slot}/5 saved!",show_alert=True)
+    await c.message.edit_text(f"✅ Layout {slot}/5 saved.\n💰 Money ×3 · ⚪ Normal ×3 · 🕳 Empty ×3")
+
 @dp.message(Command('war'))
 async def war_command(message: Message):
-    parts = (message.text or '').split()
-    if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer('Use /war TELEGRAM_ID to challenge another player.')
+    parts=(message.text or "").split()
+    if len(parts)!=2 or not parts[1].isdigit():
+        await message.answer("Use /war TELEGRAM_ID to start a box battle. Set up defenses with /boxes 1–5.")
         return
-    ok, result = await attack(message.from_user.id, int(parts[1]))
-    await message.answer(('⚔️ ' if ok else '⚠️ ') + result)
+    defender=int(parts[1])
+    if defender==message.from_user.id:
+        await message.answer("You cannot battle yourself."); return
+    async with get_pool().acquire() as conn:
+        a=await conn.fetchrow("SELECT telegram_id FROM players WHERE telegram_id=$1",message.from_user.id)
+        d=await conn.fetchrow("SELECT display_name FROM players WHERE telegram_id=$1",defender)
+        active=await conn.fetchval("SELECT id FROM box_battles WHERE challenger_id=$1 AND status='active'",message.from_user.id)
+    if not a or not d:
+        await message.answer("Both players must have started the game with /start."); return
+    if active:
+        await message.answer("Finish your current battle first."); return
+    outcomes=await random_layout(defender)
+    async with get_pool().acquire() as conn:
+        battle_id=await conn.fetchval("INSERT INTO box_battles(challenger_id,defender_id,outcomes) VALUES($1,$2,$3) RETURNING id",message.from_user.id,defender,json.dumps(outcomes))
+    await message.answer(f"⚔️ <b>BUSINESS WAR</b>\nChallenger: {message.from_user.full_name}\nDefender: {d['display_name']} (defense layout selected privately).\n\nOpen boxes. First to 2 Money wins; 2 Empty outcomes lose. Normal boxes count as neither. Maximum 5 picks.",reply_markup=battle_keyboard(battle_id))
+
+@dp.callback_query(F.data.startswith("box_b_"))
+async def business_battle_pick(c: CallbackQuery):
+    _,_,battle_s,n_s=c.data.split("_")
+    battle_id,n=int(battle_s),int(n_s)
+    async with get_pool().acquire() as conn:
+        async with conn.transaction():
+            b=await conn.fetchrow("SELECT * FROM box_battles WHERE id=$1",battle_id)
+            if not b or b["status"]!="active":
+                await c.answer("This battle has ended.",show_alert=True); return
+            if b["challenger_id"]!=c.from_user.id:
+                await c.answer("Only the challenger plays this business war.",show_alert=True); return
+            picked=json.loads(b["picked"])
+            if n in picked:
+                await c.answer("That box was already opened.",show_alert=True); return
+            outcomes=json.loads(b["outcomes"])
+            kind=outcomes[n-1]
+            picked.append(n)
+            wins=b["wins"]+(kind=="money")
+            losses=b["losses"]+(kind=="empty")
+            finished=wins>=2 or losses>=2 or len(picked)>=5
+            status="finished" if finished else "active"
+            await conn.execute("UPDATE box_battles SET picked=$1,wins=$2,losses=$3,round_no=round_no+1,status=$4 WHERE id=$5",json.dumps(picked),wins,losses,status,battle_id)
+            defender=b["defender_id"]
+            challenger=b["challenger_id"]
+    icons={"money":"💰 Money box · ×1.2","normal":"⚪ Normal box · ×1.0","empty":"🕳 Empty box · ×0.8"}
+    result=f"Box {n} revealed: {icons[kind]}\nMoney: {wins} · Empty: {losses}"
+    if finished:
+        winner=challenger if wins>losses else defender if losses>wins else None
+        if winner is None:
+            result+="\n\n🤝 Battle draw."
+        elif winner==challenger:
+            result+="\n\n🏆 Challenger wins the battle!"
+            async with get_pool().acquire() as conn:
+                await conn.execute("UPDATE players SET gold_grams=gold_grams+1,determination=LEAST(2000,determination+200) WHERE telegram_id=$1",challenger)
+                await conn.execute("UPDATE players SET gold_grams=GREATEST(0,gold_grams-1),determination=LEAST(2000,determination+100) WHERE telegram_id=$1",defender)
+        else:
+            result+="\n\n🛡 Defender wins! No challenger gold reward."
+            async with get_pool().acquire() as conn:
+                await conn.execute("UPDATE players SET determination=LEAST(2000,determination+100) WHERE telegram_id=$1",challenger)
+        await c.message.edit_text(result)
+    else:
+        await c.message.edit_text(result+"\nChoose another box.",reply_markup=battle_keyboard(battle_id,picked))
+    await c.answer(icons[kind])
 
 
 @dp.message(Command('help'))
