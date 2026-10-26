@@ -1,28 +1,50 @@
 # EMPIRE CENTURY
 
-A text-first Telegram empire simulator built with Python, aiogram 3 and PostgreSQL.
+A text-first Telegram empire simulator built with Python, aiogram 3, and **local SQLite storage**. The bot can run directly in Termux on Android; it does not require PostgreSQL or a hosted database.
+
+## Run locally in Termux
+
+1. Install Python and Git in Termux: `pkg install python git`.
+2. Clone or update this repository, then enter its folder.
+3. Create and activate a virtual environment:
+   ```sh
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+4. Install Python dependencies:
+   ```sh
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
+   ```
+5. Create your private environment file:
+   ```sh
+   cp .env.example .env
+   nano .env
+   ```
+   Replace `BOT_TOKEN=replace_me` with the token from BotFather. Keep this file private and never commit it.
+6. Start the bot:
+   ```sh
+   python -m app
+   ```
+
+The local database is created automatically at `data/dhanda.sqlite3`. The `data/` directory is local runtime data and should not be committed. Keep Termux allowed to run in the background if you want the bot to stay online; Android may still stop background processes.
 
 ## Core game loop
+
 - Start with 1,000 cash and build a business through 54 levels.
 - Collect passive income (maximum 8 hours per collection) and reinvest in upgrades.
-- Every season lasts exactly seven days. Settlement snapshots the Fosbu ranking, resets temporary cash/business progress and employee relationships, and preserves reputation and eligible permanent assets.
-- Gold exchange: 1 gram costs 1,000 cash and contributes 10 net worth.
-- Collectible assets add catalog net-worth value and can be bought from the asset shop.
-- Stocks can be bought and sold using the current market quote; stock value contributes to net worth.
-- Industrial buildings generate reputation when settled and unlock at selected business levels.
-- Clubs support creation, joining and treasury donations.
-- Business wars compare net worth, with asset/stock/cash tie-breakers; battle determination affects score.
-- Board of Directors recruiting unlocks at level 7. A boss starts with three employee slots; VIP level 5 adds two. Recruiting requires the target to accept. Employees pay a 5% share of eligible collected income to their boss.
-- Top 50 season finishers are marked for permanent reward eligibility and receive a unique permanent reward asset.
+- Every season lasts seven days. Settlement snapshots rankings and resets temporary cash/business progress.
+- Gold exchange, collectible assets, stocks, industrial buildings, clubs, employee challenges, business wars, and season rewards are part of the game.
+- Employees pay a 5% share of eligible collected income to their boss.
 
 ## Group mining
-- Group chats are reserved for mining only; all other empire commands and non-mining buttons are blocked in groups. Use the bot in a private chat for the rest of the game.
-- Use `/miningwar` to open the group's one active mining lobby. Everyone joins the same pool with the **JOIN MINING** inline button.
-- Press **START MINING** when ready. With 3–4 applicants, the top 3 by net worth are selected; with 5 or more, the top 5 are selected. At least 3 applicants are required.
-- Net worth is calculated from cash, stocks, gold, and asset valuation. Refresh and cancel are available as mining-only inline buttons.
-- Each player must first use `/start` with the bot in a private chat so their game profile exists.
+
+- Group chats are reserved for mining; use the bot in private chat for the rest of the game.
+- Use `/miningwar` in a group to register it for scheduled mining events.
+- Timed mining events and the club battle queue are an initial MVP and still need live end-to-end testing.
 
 ## Commands
+
 - `/start`, `/empire`, `/collect`, `/ranking`
 - `/assetshop`, `/buyasset sports_car`, `/inventory`
 - `/gold buy 2`, `/gold sell 1`
@@ -32,22 +54,9 @@ A text-first Telegram empire simulator built with Python, aiogram 3 and PostgreS
 - `/hire TELEGRAM_ID`, `/hireaccept CHALLENGE_ID`, `/war TELEGRAM_ID`
 - `/help`
 
-## Setup (when ready)
-1. Create a Telegram bot with BotFather.
-2. Create a PostgreSQL database.
-3. Apply `schema.sql`, then `migrations/002_seasons.sql`, `migrations/003_full_economy.sql`, `migrations/004_employees_market.sql`, and `migrations/005_group_mining_wars.sql`, in order.
-4. Set `BOT_TOKEN` and `DATABASE_URL` in the runtime environment.
-5. Install requirements and run `python -m app`.
+## Local data and limitations
 
-Do not run the bot until all migrations are applied. Keep credentials out of Git. This project is actively being built; live database and Telegram behavior still need staging tests before public launch.
-
-
-## Timed mining and club battle MVP
-
-- Register a group for mining with `/miningwar`. Registered groups receive mining events every two hours.
-- Each event has a five-minute join window and requires at least two players; otherwise the event is skipped.
-- Joined players see opponents and net worth, then choose boxes in four rounds. Money/empty/normal boxes affect temporary battle net worth only.
-- A successful four-money-box run grants a 30% collection-speed boost for two hours. The boost is applied when collecting passive income and does not change base net worth.
-- Players who have started the bot in DM receive hourly club-battle notifications and can join the club queue.
-
-Apply migrations in numerical order through `007_mining_rounds.sql` before starting the bot. This is an initial MVP; full multi-opponent club progression and live end-to-end testing remain follow-up work.
+- The SQLite database lives at `data/dhanda.sqlite3`; back it up if you want to preserve game data.
+- SQLite schema setup runs automatically on startup from `schema.sql` and `migrations/*.sql`.
+- This is a local compatibility conversion from PostgreSQL SQL to SQLite, so first startup and each gameplay feature must be tested on-device. Do not assume every advanced SQL path works until it has been exercised.
+- The bot token belongs only in your local `.env`, never in GitHub.
