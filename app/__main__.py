@@ -30,7 +30,7 @@ dp = Dispatcher()
 register_timed_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
-@dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"))
+@dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"), ~F.text.startswith("/rank"))
 async def group_mining_only_guard(message: Message):
     await message.answer("⛏ This group is for mining only. Use /miningwar to open a mining lobby; use the bot in private chat for all other game features.")
 
@@ -600,6 +600,39 @@ async def collect_command(message: Message):
     if industry_rep:
         suffix += f' Industrial reputation: +{industry_rep:,}.'
     await message.answer(f'Collected {amount:,} cash.{suffix}')
+
+
+@dp.message(Command('rank'))
+async def rank_command(message: Message):
+    target = message.reply_to_message.from_user if message.reply_to_message and message.reply_to_message.from_user else message.from_user
+    async with get_pool().acquire() as conn:
+        row = await conn.fetchrow('''WITH ranked AS (
+                SELECT p.telegram_id, p.display_name, p.cash, p.reputation, p.business_level,
+                       p.stocks, p.gold_grams,
+                       p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth,
+                       ROW_NUMBER() OVER (ORDER BY p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) DESC,
+                                                    p.reputation DESC, p.telegram_id ASC) AS position,
+                       COUNT(*) OVER () AS total_players
+                FROM players p
+                LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
+            )
+            SELECT * FROM ranked WHERE telegram_id=$1''', target.id)
+    if not row:
+        await message.answer(f"📊 {target.full_name} hasn't started Business Life yet.")
+        return
+    assets_value = max(0, int(row["worth"]) - int(row["cash"]) - int(row["stocks"]) - int(row["gold_grams"] * 10))
+    await message.answer(
+        f"📊 <b>BUSINESS LIFE RANK</b>\n\n"
+        f"👤 <b>{row['display_name']}</b>\n"
+        f"🏆 Rank: <b>#{row['position']}</b> of {row['total_players']} players\n"
+        f"💎 Net worth: <b>{int(row['worth']):,}</b>\n\n"
+        f"💵 Cash: <b>{int(row['cash']):,}</b>\n"
+        f"🪙 Gold: <b>{row['gold_grams']} g</b>\n"
+        f"📈 Stocks: <b>{int(row['stocks']):,}</b>\n"
+        f"🏢 Business level: <b>{row['business_level']}/54</b>\n"
+        f"⭐ Reputation: <b>{int(row['reputation']):,}</b>\n"
+        f"🏗️ Owned assets value: <b>{assets_value:,}</b>"
+    )
 
 
 @dp.message(Command('ranking'))
