@@ -16,7 +16,6 @@ pool = None
 def _dt(value):
     if not isinstance(value, datetime):
         return value
-    # Store timestamps as UTC without an offset so SQLite string comparisons are consistent.
     if value.tzinfo is not None:
         value = value.astimezone(timezone.utc).replace(tzinfo=None)
     return value.isoformat(sep=" ", timespec="microseconds")
@@ -39,7 +38,6 @@ sqlite3.register_converter("TIMESTAMP", _parse_dt)
 
 def _sql(statement: str, args: tuple[Any, ...] = ()):
     sql = statement.strip()
-    # Handle PostgreSQL interval arithmetic before replacing NOW().
     sql = re.sub(
         r"NOW\(\)\s*\+\s*\(\$(\d+)::(?:int|integer)\s*\*\s*INTERVAL\s*'1 day'\)",
         lambda m: "datetime('now', printf('%+d days', $" + m.group(1) + "))",
@@ -58,7 +56,6 @@ def _sql(statement: str, args: tuple[Any, ...] = ()):
     sql = re.sub(r"\bNOW\(\)", "CURRENT_TIMESTAMP", sql, flags=re.I)
     sql = re.sub(r"\$(\d+)::(?:timestamptz|timestamp|int|integer|bigint|numeric|text|boolean)", r"$\1", sql, flags=re.I)
     sql = re.sub(r"\$(\d+)::[a-zA-Z_][a-zA-Z_0-9]*(?:\([^)]*\))?", r"$\1", sql)
-    # SQLite needs WHERE before ON CONFLICT for INSERT ... SELECT statements.
     sql = re.sub(r"(FROM\s+asset_catalog\s+WHERE\s+asset_key\s*=\s*'[^']+')\s+ON\s+CONFLICT", r"\1 AND 1=1 ON CONFLICT", sql, flags=re.I)
     positions = [int(n) for n in re.findall(r"\$(\d+)", sql)]
     sql = re.sub(r"\$(\d+)", "?", sql)
@@ -158,7 +155,14 @@ async def connect() -> None:
         return
     path = Path(DATABASE_PATH).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
+    # Autocommit standalone statements; explicit transaction() blocks own
+    # their BEGIN/COMMIT and won't collide with implicit write transactions.
+    conn = sqlite3.connect(
+        path,
+        detect_types=sqlite3.PARSE_DECLTYPES,
+        check_same_thread=False,
+        isolation_level=None,
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=WAL")
@@ -170,7 +174,6 @@ async def connect() -> None:
         _apply_script(conn, (root / "schema.sql").read_text(encoding="utf-8"))
         for migration in sorted((root / "migrations").glob("*.sql")):
             _apply_script(conn, migration.read_text(encoding="utf-8"))
-        conn.commit()
     except Exception:
         conn.close()
         raise
