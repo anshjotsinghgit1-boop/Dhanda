@@ -10,7 +10,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
-from app.economy import register_player, get_player, collect_income, upgrade_business, production_per_minute
+from app.economy import register_player, get_player, collect_income, upgrade_business, production_per_second
 from app.keyboards import main_menu
 from app.seasons import season_scheduler
 from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry, resume_industry
@@ -46,7 +46,7 @@ def dashboard_text(p, worth: int | None = None) -> str:
             f'📈 Stocks: <b>{p["stocks"] if "stocks" in p else 0:,}</b>\n'
             f'⭐ Reputation: <b>{p["reputation"]:,}</b>\n'
             f'🏢 Business level: <b>{p["business_level"]}/54</b>\n'
-            f'⚙️ Production: <b>{production_per_minute(p["business_level"]):,} cash/min</b>'
+            f'⚙️ Production: <b>{production_per_second(p["business_level"]):,} cash/second</b>'
             f'{extra}\n\nBuild your empire one upgrade at a time.')
 
 
