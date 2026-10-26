@@ -397,10 +397,11 @@ async def donate_command(message: Message):
     await message.answer(('✅ ' if ok else '⚠️ ') + result)
 
 
-def battle_keyboard(battle_id, picked=None):
+def battle_keyboard(battle_id, picked=None, outcomes=None):
     picked = set(picked or [])
+    icons = {"money":"💰", "normal":"⚪", "empty":"🕳"}
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=("⬛" if n not in picked else "✓"), callback_data=f"box_b_{battle_id}_{n}") for n in range(start, start+3)]
+        [InlineKeyboardButton(text=(icons[outcomes[n-1]] if n in picked and outcomes else ("🔓" if n in picked else "⬛")), callback_data=f"box_b_{battle_id}_{n}") for n in range(start, start+3)]
         for start in (1,4,7)
     ])
 
@@ -485,9 +486,11 @@ async def war_command(message: Message):
     if active:
         await message.answer("Finish your current battle first."); return
     outcomes=await random_layout(defender)
+    challenger_worth=await net_worth(message.from_user.id)
+    defender_worth=await net_worth(defender)
     async with get_pool().acquire() as conn:
-        battle_id=await conn.fetchval("INSERT INTO box_battles(challenger_id,defender_id,outcomes) VALUES($1,$2,$3) RETURNING id",message.from_user.id,defender,json.dumps(outcomes))
-    battle_text=f"⚔️ <b>BUSINESS WAR</b>\nChallenger: {message.from_user.full_name}\nDefender: {d['display_name']} (defense layout selected privately).\n\nOpen boxes. First to 2 Money wins; 2 Empty outcomes lose. Normal boxes count as neither. Maximum 5 picks."
+        battle_id=await conn.fetchval("INSERT INTO box_battles(challenger_id,defender_id,outcomes,challenger_net_worth,defender_net_worth) VALUES($1,$2,$3,$4,$5) RETURNING id",message.from_user.id,defender,json.dumps(outcomes),challenger_worth,defender_worth)
+    battle_text=f"⚔️ <b>BUSINESS WAR</b>\nChallenger: {message.from_user.full_name}\nYour net worth: <b>{challenger_worth:,}</b>\nDefender: {d['display_name']}\nDefender net worth: <b>{defender_worth:,}</b>\n\nOpen boxes until the first pair matches. 💰 Money pair = ×1.2, ⚪ Normal pair = ×1.0, 🕳 Empty pair = ×0.8. Your adjusted battle net worth is compared with the defender's net worth."
     if message.chat.type in ("group","supergroup"):
         await bot.send_message(message.from_user.id,battle_text,reply_markup=battle_keyboard(battle_id))
         await message.answer("⚔️ Business war started. Check your private chat with the bot to play.")
@@ -498,46 +501,57 @@ async def war_command(message: Message):
 async def business_battle_pick(c: CallbackQuery):
     _,_,battle_s,n_s=c.data.split("_")
     battle_id,n=int(battle_s),int(n_s)
+    icons={"money":"💰","normal":"⚪","empty":"🕳"}
+    labels={"money":"Money ×1.2","normal":"Normal ×1.0","empty":"Empty ×0.8"}
     async with get_pool().acquire() as conn:
         async with conn.transaction():
             b=await conn.fetchrow("SELECT * FROM box_battles WHERE id=$1",battle_id)
-            if not b or b["status"]!="active":
-                await c.answer("This battle has ended.",show_alert=True); return
+            if not b:
+                await c.answer("Battle not found.",show_alert=True); return
             if b["challenger_id"]!=c.from_user.id:
                 await c.answer("Only the challenger plays this business war.",show_alert=True); return
             picked=json.loads(b["picked"])
+            outcomes=json.loads(b["outcomes"])
+            if b["status"]!="active":
+                await c.answer("This battle has ended.",show_alert=True); return
             if n in picked:
                 await c.answer("That box was already opened.",show_alert=True); return
-            outcomes=json.loads(b["outcomes"])
             kind=outcomes[n-1]
             picked.append(n)
-            wins=b["wins"]+(kind=="money")
-            losses=b["losses"]+(kind=="empty")
-            finished=wins>=2 or losses>=2 or len(picked)>=5
+            opened=[outcomes[x-1] for x in picked]
+            pair=next((k for k in ("money","normal","empty") if opened.count(k)>=2),None)
+            finished=pair is not None
             status="finished" if finished else "active"
-            await conn.execute("UPDATE box_battles SET picked=$1,wins=$2,losses=$3,round_no=round_no+1,status=$4 WHERE id=$5",json.dumps(picked),wins,losses,status,battle_id)
-            defender=b["defender_id"]
+            await conn.execute("UPDATE box_battles SET picked=$1,result_kind=$2,status=$3,round_no=round_no+1 WHERE id=$4",json.dumps(picked),pair,status,battle_id)
             challenger=b["challenger_id"]
-    icons={"money":"💰 Money box · ×1.2","normal":"⚪ Normal box · ×1.0","empty":"🕳 Empty box · ×0.8"}
-    result=f"Box {n} revealed: {icons[kind]}\nMoney: {wins} · Empty: {losses}"
+            defender=b["defender_id"]
+            challenger_worth=int(b["challenger_net_worth"])
+            defender_worth=int(b["defender_net_worth"])
+    board=battle_keyboard(battle_id,picked,outcomes)
+    result=f"📦 Box {n} revealed: {icons[kind]} <b>{labels[kind]}</b>"
     if finished:
-        winner=challenger if wins>losses else defender if losses>wins else None
-        if winner is None:
-            result+="\n\n🤝 Battle draw."
-        elif winner==challenger:
-            result+="\n\n🏆 Challenger wins the battle!"
+        multiplier={"money":1.2,"normal":1.0,"empty":0.8}[pair]
+        adjusted=int(challenger_worth*multiplier)
+        difference=adjusted-defender_worth
+        result+=f"\n\n🔗 First pair: {icons[pair]} <b>{labels[pair]}</b>"
+        result+=f"\n\n⚔️ <b>NET WORTH MATCHUP</b>\nChallenger: {challenger_worth:,} × {multiplier:.1f} = <b>{adjusted:,}</b>\nDefender: <b>{defender_worth:,}</b>\nDifference: <b>{abs(difference):,}</b> {'in challenger’s favour' if difference>0 else 'in defender’s favour' if difference<0 else '(tie)'}"
+        if difference>0:
+            result+="\n\n🏆 <b>Challenger wins!</b>"
             async with get_pool().acquire() as conn:
                 await conn.execute("UPDATE players SET gold_grams=gold_grams+1,determination=LEAST(2000,determination+200) WHERE telegram_id=$1",challenger)
                 await conn.execute("UPDATE players SET gold_grams=GREATEST(0,gold_grams-1),determination=LEAST(2000,determination+100) WHERE telegram_id=$1",defender)
-        else:
-            result+="\n\n🛡 Defender wins! No challenger gold reward."
+        elif difference<0:
+            result+="\n\n🛡 <b>Defender wins!</b>"
             async with get_pool().acquire() as conn:
                 await conn.execute("UPDATE players SET determination=LEAST(2000,determination+100) WHERE telegram_id=$1",challenger)
-        await c.message.edit_text(result)
+        else:
+            result+="\n\n🤝 <b>It's a tie!</b>"
+        result+="\n\nOpened boxes stay visible below."
     else:
-        await c.message.edit_text(result+"\nChoose another box.",reply_markup=battle_keyboard(battle_id,picked))
-    await c.answer(icons[kind])
-
+        result+=f"\n\nOpened {len(picked)}/9 boxes. Find the first matching pair to resolve the war."
+    await c.message.edit_text(result,reply_markup=board)
+    await c.answer(f"{icons[kind]} {labels[kind]}")
+    
 
 @dp.message(Command('help'))
 async def help_command(message: Message):
