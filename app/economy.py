@@ -2,13 +2,17 @@ from datetime import datetime, timezone
 from app.db import get_pool
 
 OFFLINE_CAP_SECONDS = 8 * 60 * 60
-BASE_CASH_PER_MINUTE = 10
+BASE_CASH_PER_SECOND = 1
 
 def upgrade_cost(level: int) -> int:
     return 500 * level * level
 
+def production_per_second(level: int) -> int:
+    return BASE_CASH_PER_SECOND * level
+
+# Backwards-compatible display helper for older parts of the UI.
 def production_per_minute(level: int) -> int:
-    return BASE_CASH_PER_MINUTE * level
+    return production_per_second(level) * 60
 
 async def register_player(user) -> None:
     name = (user.full_name or 'Player')[:80]
@@ -33,7 +37,7 @@ async def collect_income(telegram_id: int) -> tuple[int, int]:
                 return 0, 0
             now = datetime.now(timezone.utc)
             elapsed = max(0, min((now - player['last_collected_at']).total_seconds(), OFFLINE_CAP_SECONDS))
-            base = int(elapsed // 60) * production_per_minute(player['business_level'])
+            base = int(elapsed) * production_per_second(player['business_level'])
             boost = float(player['collection_boost'] or 1.0)
             if player['collection_boost_until'] is None or player['collection_boost_until'] <= now:
                 boost = 1.0
@@ -61,4 +65,4 @@ async def upgrade_business(telegram_id: int) -> tuple[bool, str]:
             if p['cash'] < cost:
                 return False, f'You need {cost:,} cash to upgrade. You have {p["cash"]:,}.'
             await conn.execute('UPDATE players SET cash=cash-$1, business_level=business_level+1 WHERE telegram_id=$2', cost, telegram_id)
-            return True, f'Business upgraded to level {level + 1}! Production is now {production_per_minute(level + 1):,} cash/min.'
+            return True, f'Business upgraded to level {level + 1}! Production is now {production_per_second(level + 1):,} cash/second.'
