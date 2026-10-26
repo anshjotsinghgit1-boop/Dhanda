@@ -520,13 +520,17 @@ async def business_battle_pick(c: CallbackQuery):
             picked.append(n)
             opened=[outcomes[x-1] for x in picked]
             pair=next((k for k in ("money","normal","empty") if opened.count(k)>=2),None)
-            finished=pair is not None
+            finished=pair is not None and len(picked)>=3  # reveal at least three boxes
             status="finished" if finished else "active"
             await conn.execute("UPDATE box_battles SET picked=$1,result_kind=$2,status=$3,round_no=round_no+1 WHERE id=$4",json.dumps(picked),pair,status,battle_id)
             challenger=b["challenger_id"]
             defender=b["defender_id"]
             challenger_worth=int(b["challenger_net_worth"])
             defender_worth=int(b["defender_net_worth"])
+            challenger_row=await conn.fetchrow("SELECT display_name FROM players WHERE telegram_id=$1",challenger)
+            defender_row=await conn.fetchrow("SELECT display_name FROM players WHERE telegram_id=$1",defender)
+            challenger_name=challenger_row["display_name"] if challenger_row else "Challenger"
+            defender_name=defender_row["display_name"] if defender_row else "Defender"
     board=battle_keyboard(battle_id,picked,outcomes)
     result=f"📦 Box {n} revealed: {icons[kind]} <b>{labels[kind]}</b>"
     if finished:
@@ -534,7 +538,7 @@ async def business_battle_pick(c: CallbackQuery):
         adjusted=int(challenger_worth*multiplier)
         difference=adjusted-defender_worth
         result+=f"\n\n🔗 First pair: {icons[pair]} <b>{labels[pair]}</b>"
-        result+=f"\n\n⚔️ <b>NET WORTH MATCHUP</b>\nChallenger: {challenger_worth:,} × {multiplier:.1f} = <b>{adjusted:,}</b>\nDefender: <b>{defender_worth:,}</b>\nDifference: <b>{abs(difference):,}</b> {'in challenger’s favour' if difference>0 else 'in defender’s favour' if difference<0 else '(tie)'}"
+        result+=f"\n\n🏁 <b>BUSINESS WAR · FINISHED</b>\n\n<b>{challenger_name}</b>\n{challenger_worth:,} × {multiplier:.1f} = <b>{adjusted:,}</b>\n\n<b>{defender_name}</b>\n{defender_worth:,}\n\n<b>NET WORTH DIFFERENCE: {abs(difference):,}</b>\n{'🏆 Challenger wins!' if difference>0 else '🛡 Defender wins!' if difference<0 else '🤝 It is a tie!'}"
         if difference>0:
             result+="\n\n🏆 <b>Challenger wins!</b>"
             async with get_pool().acquire() as conn:
@@ -546,9 +550,9 @@ async def business_battle_pick(c: CallbackQuery):
                 await conn.execute("UPDATE players SET determination=LEAST(2000,determination+100) WHERE telegram_id=$1",challenger)
         else:
             result+="\n\n🤝 <b>It's a tie!</b>"
-        result+="\n\nOpened boxes stay visible below."
+        result+="\n\n✅ <b>BATTLE ENDED</b> · Final box board remains visible below."
     else:
-        result+=f"\n\nOpened {len(picked)}/9 boxes. Find the first matching pair to resolve the war."
+        result+=f"\n\n📦 <b>Boxes opened: {len(picked)}/9</b>\n{'Pair found — open one more box to confirm the result.' if pair else 'Find a matching pair. At least 3 boxes must be opened before the result is final.'}"
     await c.message.edit_text(result,reply_markup=board)
     await c.answer(f"{icons[kind]} {labels[kind]}")
     
