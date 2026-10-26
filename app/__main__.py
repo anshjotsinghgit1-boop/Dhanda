@@ -3,6 +3,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 from aiogram import Bot, Dispatcher, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -33,7 +34,6 @@ async def group_mining_only_guard(message: Message):
 @dp.callback_query(F.message.chat.type.in_({"group", "supergroup"}), ~F.data.startswith("mine_"))
 async def group_non_mining_button_guard(callback: CallbackQuery):
     await callback.answer("Only mining buttons work in group chats. Open the bot in private chat for other features.", show_alert=True)
-
 
 
 def dashboard_text(p, worth: int | None = None) -> str:
@@ -78,9 +78,16 @@ async def dashboard(callback: CallbackQuery):
     p = await get_player(callback.from_user.id)
     if not p:
         await callback.answer('Run /start first.', show_alert=True)
-    else:
-        await callback.message.edit_text(dashboard_text(p, await net_worth(callback.from_user.id)), reply_markup=main_menu())
-        await callback.answer()
+        return
+    try:
+        await callback.message.edit_text(
+            dashboard_text(p, await net_worth(callback.from_user.id)),
+            reply_markup=main_menu(),
+        )
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
+    await callback.answer()
 
 
 @dp.callback_query(F.data == 'collect')
@@ -120,7 +127,6 @@ async def ranking(callback: CallbackQuery):
             for i, r in enumerate(rows, 1))
     await callback.message.answer(text, reply_markup=main_menu())
     await callback.answer()
-
 
 
 def mining_keyboard(war_id: int, status: str) -> InlineKeyboardMarkup:
@@ -291,7 +297,6 @@ async def build_industry_command(message: Message):
     await message.answer(('✅ ' if ok else '⚠️ ') + result)
 
 
-
 @dp.message(Command('resumeindustry'))
 async def resume_industry_command(message: Message):
     ok, result = await resume_industry(message.from_user.id)
@@ -383,8 +388,6 @@ async def ranking_command(message: Message):
             FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id ORDER BY worth DESC,p.reputation DESC LIMIT 10''')
     text = '🏆 <b>FOSBU LIST — TOP 10</b>\n\n' + ('\n'.join(f'{i}. {r["display_name"]} — {r["worth"]:,} NW' for i, r in enumerate(rows, 1)) if rows else 'No players yet.')
     await message.answer(text)
-
-
 
 
 @dp.message(Command('stocks'))
