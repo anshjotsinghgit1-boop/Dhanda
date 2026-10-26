@@ -487,7 +487,12 @@ async def war_command(message: Message):
     outcomes=await random_layout(defender)
     async with get_pool().acquire() as conn:
         battle_id=await conn.fetchval("INSERT INTO box_battles(challenger_id,defender_id,outcomes) VALUES($1,$2,$3) RETURNING id",message.from_user.id,defender,json.dumps(outcomes))
-    await message.answer(f"⚔️ <b>BUSINESS WAR</b>\nChallenger: {message.from_user.full_name}\nDefender: {d['display_name']} (defense layout selected privately).\n\nOpen boxes. First to 2 Money wins; 2 Empty outcomes lose. Normal boxes count as neither. Maximum 5 picks.",reply_markup=battle_keyboard(battle_id))
+    battle_text=f"⚔️ <b>BUSINESS WAR</b>\nChallenger: {message.from_user.full_name}\nDefender: {d['display_name']} (defense layout selected privately).\n\nOpen boxes. First to 2 Money wins; 2 Empty outcomes lose. Normal boxes count as neither. Maximum 5 picks."
+    if message.chat.type in ("group","supergroup"):
+        await bot.send_message(message.from_user.id,battle_text,reply_markup=battle_keyboard(battle_id))
+        await message.answer("⚔️ Business war started. Check your private chat with the bot to play.")
+    else:
+        await message.answer(battle_text,reply_markup=battle_keyboard(battle_id))
 
 @dp.callback_query(F.data.startswith("box_b_"))
 async def business_battle_pick(c: CallbackQuery):
