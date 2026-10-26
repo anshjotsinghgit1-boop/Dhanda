@@ -14,7 +14,12 @@ pool = None
 
 
 def _dt(value):
-    return value.isoformat(sep=" ", timespec="microseconds") if isinstance(value, datetime) else value
+    if not isinstance(value, datetime):
+        return value
+    # Store timestamps as UTC without an offset so SQLite string comparisons are consistent.
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.isoformat(sep=" ", timespec="microseconds")
 
 
 def _parse_dt(value):
