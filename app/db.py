@@ -48,7 +48,7 @@ def _sql(statement: str, args: tuple[Any, ...] = ()):
         lambda m: "datetime('now','+" + m.group(1) + "')",
         sql, flags=re.I,
     )
-    sql = re.sub(r"\s+FOR\s+UPDATE\b", "", sql, flags=re.I)
+    sql = re.sub(r"\s+FOR\s+UPDATE(?:\s+OF\s+[A-Za-z_][A-Za-z_0-9]*)?", "", sql, flags=re.I)
     sql = re.sub(r"\bCREATE\s+OR\s+REPLACE\s+VIEW\b", "CREATE VIEW IF NOT EXISTS", sql, flags=re.I)
     sql = re.sub(r"\bBIGSERIAL\b", "INTEGER", sql, flags=re.I)
     sql = re.sub(r"\bBIGINT\b|\bSMALLINT\b", "INTEGER", sql, flags=re.I)
