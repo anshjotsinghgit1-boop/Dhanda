@@ -30,7 +30,7 @@ dp = Dispatcher()
 register_timed_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
-@dp.message(F.chat.type.in_({"group", "supergroup"}), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"))
+@dp.message(F.chat.type.in_({"group", "supergroup"}), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"))
 async def group_mining_only_guard(message: Message):
     await message.answer("⛏ This group is for mining only. Use /miningwar to open a mining lobby; use the bot in private chat for all other game features.")
 
@@ -461,10 +461,19 @@ async def box_setup_save(c: CallbackQuery):
 @dp.message(Command('war'))
 async def war_command(message: Message):
     parts=(message.text or "").split()
-    if len(parts)!=2 or not parts[1].isdigit():
-        await message.answer("Use /war TELEGRAM_ID to start a box battle. Set up defenses with /boxes 1–5.")
+    if message.chat.type in ("group","supergroup") and message.reply_to_message and message.reply_to_message.from_user:
+        defender=int(message.reply_to_message.from_user.id)
+    elif len(parts)==2 and parts[1].isdigit():
+        defender=int(parts[1])
+    else:
+        await message.answer("Use /war TELEGRAM_ID in private chat, or reply to a player's message with /war in a group.")
         return
-    defender=int(parts[1])
+    if message.chat.type in ("group","supergroup"):
+        try:
+            await bot.send_message(message.from_user.id, "⚔️ You started a business war from the group. Open the boxes below.")
+        except Exception:
+            await message.answer("Open the bot in private chat and press /start first, then retry the group reply /war.")
+            return
     if defender==message.from_user.id:
         await message.answer("You cannot battle yourself."); return
     async with get_pool().acquire() as conn:
