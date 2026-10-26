@@ -159,7 +159,7 @@ async def collect(callback: CallbackQuery):
     suffix = f'\n👑 Boss share paid: {shared:,} cash.' if shared else ''
     if industry_rep:
         suffix += f'\n🏭 Industrial reputation settled: +{industry_rep:,}.'
-    await callback.message.answer(f'💰 Collected <b>{amount:,}</b> cash!{suffix}', reply_markup=main_menu())
+    await callback.message.answer(f'💰 Collected <b>{amount:,}</b> cash!{suffix}')
     await callback.answer('Income collected')
 
 
