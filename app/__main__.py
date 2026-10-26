@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.client.default import DefaultBotProperties
 
 from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
@@ -21,7 +22,7 @@ from app.mining_wars import create_war, join_team, war_snapshot, start_fight, ca
 from app.timed_events import register_timed_handlers, timed_scheduler, register_mining_group
 
 logging.basicConfig(level=logging.INFO)
-bot = Bot(BOT_TOKEN)
+bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 register_timed_handlers(bot, dp)
 
@@ -54,14 +55,72 @@ async def ensure_player(user) -> bool:
     return bool(await get_player(user.id))
 
 
+def welcome_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏢 Start my company", callback_data="start_company")],
+        [InlineKeyboardButton(text="📘 Read the rules", callback_data="game_rules")],
+    ])
+
+
 @dp.message(CommandStart())
 async def start(message: Message):
-    await register_player(message.from_user)
+    if message.chat.type != "private":
+        await message.answer("Open me in a private chat to start and manage your company.")
+        return
     p = await get_player(message.from_user.id)
-    worth = await net_worth(message.from_user.id)
+    if p:
+        await message.answer(dashboard_text(p, await net_worth(message.from_user.id)),
+                             reply_markup=main_menu())
+        return
     await message.answer(
-        'Welcome to <b>EMPIRE CENTURY</b>!\n\nYour business empire starts now. Collect income, invest in assets, buy gold, build industry, hire employees, and climb the century rankings.\n\n'
-        + dashboard_text(p, worth), reply_markup=main_menu())
+        "🏛 <b>BUSINESS LIFE</b>\n"
+        "<i>Build a company. Grow your wealth. Become a business legend.</i>\n\n"
+        "You are starting from zero experience with 1,000 cash. Start your company to open your dashboard, collect income, upgrade your business, and unlock new ways to invest.\n\n"
+        "New here? Read the rules first, or tap the button below to begin.",
+        reply_markup=welcome_keyboard())
+
+
+@dp.callback_query(F.data == "start_company")
+async def start_company(callback: CallbackQuery):
+    await register_player(callback.from_user)
+    p = await get_player(callback.from_user.id)
+    await callback.message.edit_text(
+        "✅ <b>Your company is open!</b>\n\n" + dashboard_text(
+            p, await net_worth(callback.from_user.id)),
+        reply_markup=main_menu())
+    await callback.answer("Company created!")
+
+
+@dp.callback_query(F.data == "game_rules")
+async def game_rules(callback: CallbackQuery):
+    await callback.message.answer(
+        "📘 <b>BUSINESS LIFE — HOW TO PLAY</b>\n\n"
+        "<b>1. Start and grow</b>\n"
+        "Tap “Start my company” to begin with 1,000 cash. Your company produces cash over time. Tap “Collect income” to claim what has built up. Income is not added to your cash display until you collect it.\n\n"
+        "<b>2. Upgrade your business</b>\n"
+        "Upgrades increase your business level and production. Each upgrade costs cash; the bot tells you the price before you can afford it. Keep some cash available so you can invest in the next level.\n\n"
+        "<b>3. Net worth and ranking</b>\n"
+        "Net worth is the estimated value of your cash, investments, gold, and owned assets. The ranking compares players by net worth, with reputation used as a tie-breaker.\n\n"
+        "<b>4. Assets</b>\n"
+        "Use /assetshop to see items for sale, /buyasset sports_car to buy one, and /inventory to view your collection. The shop shows each item's price and net-worth value.\n\n"
+        "<b>5. Gold</b>\n"
+        "Gold costs 1,000 cash per gram. Use /gold buy 2 to buy 2 grams or /gold sell 1 to sell 1 gram. Check your cash before buying.\n\n"
+        "<b>6. Industry</b>\n"
+        "Use /industry to view industrial buildings, their cost, reputation earned per hour, and level requirement. Buy one with /buildindustry workshop. Use /resumeindustry if industry pauses after a season rollover.\n\n"
+        "<b>7. Clubs</b>\n"
+        "Use /club to check your club, /club create Empire Crew | EC to create one, or /club join EC to join one. /donate 1000 adds cash to your club treasury.\n\n"
+        "<b>8. Stocks</b>\n"
+        "Use /stocks to view share prices and your holdings. Example: /stock buy ECOR 10. Sell shares with /stock sell ECOR 2.\n\n"
+        "<b>9. Mining events</b>\n"
+        "A group admin/member can register a Telegram group with /miningwar. Mining events open automatically every 2 hours with a 5-minute join window. Join from the event button and use /miningstatus to view the group event.\n\n"
+        "<b>10. Seasons and fair play</b>\n"
+        "Seasons last 7 days. At settlement, temporary cash and business progress reset; reputation and eligible permanent assets persist. Check messages before spending: purchases and upgrades are not free.\n\n"
+        "<b>Quick start</b>\n"
+        "1) Start your company.  2) Collect income.  3) Upgrade when you can afford it.  4) Explore assets, gold, stocks, industry, and clubs as you grow.",
+        reply_markup=welcome_keyboard())
+    await callback.answer()
+
+
 
 
 @dp.message(Command('empire'))
@@ -347,24 +406,34 @@ async def war_command(message: Message):
 
 @dp.message(Command('help'))
 async def help_command(message: Message):
-    await message.answer('''<b>EMPIRE CENTURY — COMMANDS</b>
-/empire — your dashboard
-/collect — use the Collect income button
-/assetshop — browse luxury assets
-/buyasset sports_car — purchase an asset
-/inventory — your assets and net worth
-/gold buy 2 — buy 2 grams of gold
-/gold sell 1 — sell 1 gram of gold
-/industry — industrial park catalog
-/buildindustry workshop — buy a building\n/resumeindustry — resume industry after a season rollover
-/club — view your club
-/club create Name | TAG — create a club
-/club join TAG — join a club
-/donate 1000 — donate to club treasury
-/war TELEGRAM_ID — direct business war\n/miningwar 3 or /miningwar 5 — group mining war\n/miningstatus — refresh group war\n/stocks — stock market\n/stock buy ECOR 10 — buy shares\n/hire TELEGRAM_ID — send recruitment challenge\n/hireaccept ID — accept recruitment
-/ranking — use the Season ranking button
-
-Seasons last exactly seven days. Temporary cash and business progress reset at settlement; reputation and eligible permanent assets persist.''', reply_markup=main_menu())
+    await message.answer(
+        "📘 <b>BUSINESS LIFE — COMMAND GUIDE</b>\n\n"
+        "/start — start your company or open your dashboard\n"
+        "/empire — view your company status\n"
+        "/collect — collect saved business income\n"
+        "/assetshop — browse assets for sale\n"
+        "/buyasset sports_car — buy an asset using its key\n"
+        "/inventory — view your assets and total net worth\n"
+        "/gold buy 2 — buy 2 grams of gold\n"
+        "/gold sell 1 — sell 1 gram of gold\n"
+        "/industry — view industrial buildings\n"
+        "/buildindustry workshop — buy a workshop\n"
+        "/resumeindustry — resume industry after a season rollover\n"
+        "/stocks — view share prices and your holdings\n"
+        "/stock buy ECOR 10 — buy 10 shares\n"
+        "/stock sell ECOR 2 — sell 2 shares\n"
+        "/club — view your club\n"
+        "/club create Empire Crew | EC — create a club\n"
+        "/club join EC — join a club by tag\n"
+        "/donate 1000 — donate cash to your club\n"
+        "/war TELEGRAM_ID — challenge another player\n"
+        "/hire TELEGRAM_ID — send an employee challenge\n"
+        "/hireaccept CHALLENGE_ID — accept a challenge\n"
+        "/ranking — view the top players\n"
+        "/miningwar — register a group for mining events\n"
+        "/miningstatus — view the group's mining event\n\n"
+        "For the full explanation, tap “Read the rules” in /start. Seasons last 7 days; temporary cash and business progress reset at settlement, while reputation and eligible permanent assets persist.",
+        reply_markup=main_menu())
 
 
 @dp.message(Command('collect'))
