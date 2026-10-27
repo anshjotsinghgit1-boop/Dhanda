@@ -66,7 +66,9 @@ async def _resolve(bot: Bot, match_id: int, timed_out: bool = False):
                     await conn.execute("UPDATE players SET club_battle_wins=0 WHERE telegram_id IN ($1,$2)", m["player_a"], m["player_b"])
                 await conn.execute("INSERT INTO club_battles(player_a,player_b,match_number,round_number,wins_a,wins_b,status,finished_at) VALUES($1,$2,1,$3,$4,$5,'finished',NOW())", m["player_a"], m["player_b"], rn, wa, wb)
             else:
-                await conn.execute("UPDATE club_live_matches SET round_number=$1,wins_a=$2,wins_b=$3,picked_a=NULL,picked_b=NULL,deadline_at=NOW()+INTERVAL '15 seconds' WHERE id=$4", rn+1, wa, wb, match_id)
+                next_layout_a = json.dumps(make_layout(f"{match_id}:{rn+1}:{m['player_a']}:{datetime.now(timezone.utc).timestamp()}"))
+                next_layout_b = json.dumps(make_layout(f"{match_id}:{rn+1}:{m['player_b']}:{datetime.now(timezone.utc).timestamp()}"))
+                await conn.execute("UPDATE club_live_matches SET round_number=$1,wins_a=$2,wins_b=$3,picked_a=NULL,picked_b=NULL,layout_a=$4,layout_b=$5,deadline_at=NOW()+INTERVAL '15 seconds' WHERE id=$6", rn+1, wa, wb, next_layout_a, next_layout_b, match_id)
             names = await conn.fetch("SELECT telegram_id,display_name FROM players WHERE telegram_id IN ($1,$2)", m["player_a"], m["player_b"])
             names_by_id = {r["telegram_id"]: r["display_name"] for r in names}
     round_line = f"Round {rn}: {ICON.get(ka, '⌛')} vs {ICON.get(kb, '⌛')} — " + (f"{names_by_id.get(winner, 'Player')} wins." if winner else "Draw.")
