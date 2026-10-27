@@ -90,6 +90,8 @@ async def timed_scheduler(bot: Bot):
                 for group in groups:
                     try:
                         async with get_pool().acquire() as conn:
+                            # A group's previous reward ends as soon as its next mining begins.
+                            await conn.execute("UPDATE mining_group_rewards SET expires_at=NOW() WHERE chat_id=$1", group["chat_id"])
                             event_id = await conn.fetchval("INSERT INTO timed_mining_events(chat_id,opens_at,closes_at) VALUES($1,NOW(),NOW()+INTERVAL '5 minutes') RETURNING id", group["chat_id"])
                         await bot.send_message(group["chat_id"], f"⛏️ <b>MINING LOBBY OPEN</b> · #{event_id}\n━━━━━━━━━━━━━━━━━━\n⏳ <b>5:00 JOIN WINDOW</b>\n👥 Minimum 3 players. Fewer than 3 = event skipped.\n🏆 3–4 applicants: top 3 by net worth qualify.\n💎 5+ applicants: top 5 by net worth qualify.\n📦 Tap JOIN MINING below. Start the bot in DM first.", reply_markup=join_kb(event_id))
                     except Exception:
