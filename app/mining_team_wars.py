@@ -21,7 +21,13 @@ async def finalize_mining_event(bot: Bot, event_id: int, chat_id: int):
                 p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0) AS worth,p.reputation
                 FROM timed_mining_players t JOIN players p ON p.telegram_id=t.player_id
                 LEFT JOIN player_asset_valuation v ON v.player_id=p.telegram_id
-                WHERE t.event_id=$1 ORDER BY worth DESC,p.reputation DESC,p.telegram_id ASC""", event_id)
+                WHERE t.event_id=$1
+                AND NOT EXISTS (
+                    SELECT 1 FROM mining_team_players mtp
+                    JOIN mining_teams mt ON mt.id=mtp.team_id
+                    WHERE mtp.player_id=p.telegram_id AND mt.status IN ('waiting','assigned')
+                )
+                ORDER BY worth DESC,p.reputation DESC,p.telegram_id ASC""", event_id)
             if len(players) < 3:
                 await conn.execute("UPDATE timed_mining_events SET status='skipped',finished_at=NOW() WHERE id=$1", event_id)
                 msg = "⛏ <b>MINING SKIPPED</b> — fewer than 3 players joined. Try the next scheduled event."
