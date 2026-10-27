@@ -178,17 +178,17 @@ async def events_command(message: Message):
 async def top_mining_groups_text() -> str:
     rows = await top_mining_groups(10)
     if not rows:
-        return ("🏆 <b>TOP MINING GROUPS</b>\\n\\nNo group data yet. "
+        return ("🏆 <b>TOP MINING GROUPS</b>\n\nNo group data yet. "
                 "The bot records known players as they use registered groups.")
     lines = ["🏆 <b>TOP MINING GROUPS BY COMBINED NET WORTH</b>",
              "━━━━━━━━━━━━━━━━━━",
              "<i>Based on registered players the bot has observed in each group.</i>"]
     for i, row in enumerate(rows, 1):
         bonus = " · 💰 +15% active" if row["has_active_bonus"] else ""
-        lines.append(f"{i}. <b>{escape(str(row['title']))}</b>\\n"
+        lines.append(f"{i}. <b>{escape(str(row['title']))}</b>\n"
                      f"   💎 {int(row['total_worth'] or 0):,} total net worth · "
                      f"👥 {int(row['player_count'] or 0)} known players{bonus}")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 @dp.message(Command("topgroups"))
