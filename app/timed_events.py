@@ -5,6 +5,7 @@ from aiogram import F, Bot, Dispatcher
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from app.db import get_pool
 from app.club_live import club_battle_tick
+from app.mining_team_wars import finalize_mining_event, mining_team_tick, register_mining_team_handlers
 
 log = logging.getLogger(__name__)
 MINING_INTERVAL = 7200
