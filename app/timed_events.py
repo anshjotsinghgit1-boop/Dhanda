@@ -86,13 +86,6 @@ def register_timed_handlers(bot: Bot, dp: Dispatcher):
             count = await conn.fetchval("SELECT COUNT(*) FROM timed_mining_players WHERE event_id=$1", event_id)
         await c.answer(f"Joined mining! {count} player(s) joined.")
 
-    @dp.callback_query(F.data == "cbq_join")
-    async def club_join(c: CallbackQuery):
-        async with get_pool().acquire() as conn:
-            await conn.execute("INSERT INTO club_battle_queue(player_id) VALUES($1) ON CONFLICT DO NOTHING", c.from_user.id)
-            count = await conn.fetchval("SELECT COUNT(*) FROM club_battle_queue")
-        await c.answer(f"Joined club queue. {count} waiting.", show_alert=True)
-
     @dp.callback_query(F.data.startswith("tmr_"))
     async def mining_box(c: CallbackQuery):
         _, event_id, round_no, box_no = c.data.split("_")
