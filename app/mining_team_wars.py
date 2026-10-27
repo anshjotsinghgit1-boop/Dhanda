@@ -120,6 +120,7 @@ async def mining_team_tick(bot: Bot):
                     await conn.execute("UPDATE mining_team_war_opponents SET status='won' WHERE war_id=$1 AND matchup_number=$2",item["war_id"],item["matchup_number"])
                     if int(item["matchup_number"])==4:
                         await conn.execute("UPDATE mining_team_wars SET status='won',finished_at=NOW(),main_wins=4 WHERE id=$1",item["war_id"])
+                        await conn.execute("UPDATE mining_teams SET status='finished' WHERE id IN (SELECT main_team_id FROM mining_team_wars WHERE id=$1 UNION SELECT opponent_team_id FROM mining_team_war_opponents WHERE war_id=$1)",item["war_id"])
                         result="🏆 <b>MINING WAR WON!</b> Your team won all four matchups."
                     else:
                         nxt=int(item["matchup_number"])+1
@@ -129,6 +130,7 @@ async def mining_team_tick(bot: Bot):
                 else:
                     await conn.execute("UPDATE mining_team_war_opponents SET status='lost' WHERE war_id=$1 AND matchup_number=$2",item["war_id"],item["matchup_number"])
                     await conn.execute("UPDATE mining_team_wars SET status='lost',finished_at=NOW() WHERE id=$1",item["war_id"])
+                    await conn.execute("UPDATE mining_teams SET status='finished' WHERE id IN (SELECT main_team_id FROM mining_team_wars WHERE id=$1 UNION SELECT opponent_team_id FROM mining_team_war_opponents WHERE war_id=$1)",item["war_id"])
                     result=f"❌ <b>MINING WAR LOST</b> — matchup {item['matchup_number']} ended {aw}–{bw}. All four matchups must be won."
         for chat_id in {int(item["main_chat"]),int(item["opponent_chat"])}:
             try:
@@ -154,7 +156,7 @@ def register_mining_team_handlers(bot: Bot, dp: Dispatcher):
                     JOIN mining_team_war_opponents o ON o.war_id=w.id AND o.matchup_number=$2
                     JOIN mining_team_players tp ON tp.player_id=$3 AND tp.team_id IN (w.main_team_id,o.opponent_team_id)
                     JOIN mining_team_layouts l ON l.war_id=w.id AND l.matchup_number=o.matchup_number AND l.player_id=$3
-                    WHERE w.id=$1""",war_id,matchup,c.from_user.id)
+                    WHERE w.id=$1 AND o.deadline_at>NOW()""",war_id,matchup,c.from_user.id)
                 if not row or row["status"]!="active" or int(row["current_matchup"])!=matchup or row["matchup_status"]!="active":
                     await c.answer("This matchup is not active for you.",show_alert=True); return
                 if row["deadline_at"] is None:
