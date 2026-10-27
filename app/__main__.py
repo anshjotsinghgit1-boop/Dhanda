@@ -13,8 +13,8 @@ from aiogram.client.default import DefaultBotProperties
 
 from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
-from app.economy import register_player, get_player, collect_income, upgrade_business, production_per_second
-from app.keyboards import main_menu
+from app.economy import register_player, get_player, collect_income, upgrade_business, production_per_second, upgrade_cost
+from app.keyboards import main_menu, my_empire_keyboard, back_home_keyboard
 from app.seasons import season_scheduler
 from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry, resume_industry
 from app.clubs import create_club, join_club, my_club, donate_to_club
@@ -67,19 +67,35 @@ def event_countdown_text() -> str:
 
 
 def dashboard_text(p, worth: int | None = None) -> str:
-    extra = f'\n🏆 Net worth: <b>{worth:,}</b>' if worth is not None else ''
-    return (f'🏛 <b>EMPIRE CENTURY</b>\n'
-            f'━━━━━━━━━━━━━━━━━━\n'
-            f'👤 <b>{p["display_name"]}</b>\n\n'
-            f'💵 Cash: <b>{p["cash"]:,}</b>\n'
-            f'🪙 Gold: <b>{p["gold_grams"] if "gold_grams" in p else 0} g</b>\n'
-            f'📈 Stocks: <b>{p["stocks"] if "stocks" in p else 0:,}</b>\n'
-            f'⭐ Reputation: <b>{p["reputation"]:,}</b>\n'
-            f'🏢 Business level: <b>{p["business_level"]}/54</b>\n'
-            f'⚙️ Production: <b>{production_per_second(p["business_level"]):,} cash/sec</b>'
-            f'{extra}\n\n{event_countdown_text()}\n\n'
-            '💡 <i>Build smart. Invest wisely. Grow your empire.</i>')
-
+    level = int(p["business_level"])
+    cash = int(p["cash"])
+    rate = production_per_second(level)
+    if level >= 54:
+        milestone = "🏆 <b>MAX LEVEL REACHED</b> · Your business is fully upgraded."
+    else:
+        cost = upgrade_cost(level)
+        shortfall = max(0, cost - cash)
+        progress = min(100, int(cash * 100 / cost)) if cost else 100
+        milestone = (
+            f"🎯 <b>NEXT MILESTONE · LEVEL {level + 1}</b>\\n"
+            f"Upgrade cost: <b>{cost:,}</b> cash · "
+            + (f"<b>{shortfall:,}</b> more needed" if shortfall else "Ready to upgrade")
+            + f"\\nProgress: <b>{progress}%</b>"
+        )
+    extra = f'\\n🏆 Net worth: <b>{worth:,}</b>' if worth is not None else ''
+    return (
+        '🏛 <b>EMPIRE CENTURY</b>\\n'
+        '━━━━━━━━━━━━━━━━━━\\n'
+        f'👤 <b>{p["display_name"]}</b>\\n\\n'
+        f'💵 Treasury: <b>{cash:,}</b>\\n'
+        f'⚙️ Production: <b>{rate:,} cash/sec</b> · <b>{rate * 3600:,}/hour</b>\\n'
+        f'🪙 Gold: <b>{p["gold_grams"] if "gold_grams" in p else 0} g</b>\\n'
+        f'📈 Stocks: <b>{p["stocks"] if "stocks" in p else 0:,}</b>\\n'
+        f'⭐ Reputation: <b>{p["reputation"]:,}</b>\\n'
+        f'🏢 Business level: <b>{level}/54</b>'
+        f'{extra}\\n\\n{milestone}\\n\\n'
+        '💡 <i>Build smart. Invest wisely. Grow your empire.</i>'
+    )
 
 async def ensure_player(user) -> bool:
     await register_player(user)
@@ -128,11 +144,12 @@ def events_text() -> str:
 
 def events_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Refresh countdowns", callback_data="events_refresh")],
-        [InlineKeyboardButton(text="🏠 Dashboard", callback_data="dashboard"),
-         InlineKeyboardButton(text="📘 Rules", callback_data="game_rules")],
+        [InlineKeyboardButton(text="⛏️ Mining Rules", callback_data="rule_mining"),
+         InlineKeyboardButton(text="🏰 Club Rules", callback_data="rule_club")],
+        [InlineKeyboardButton(text="🔄 Refresh Countdown", callback_data="events_refresh")],
+        [InlineKeyboardButton(text="🏢 My Empire", callback_data="my_empire"),
+         InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
     ])
-
 
 @dp.message(Command("events"))
 async def events_command(message: Message):
@@ -163,35 +180,62 @@ async def start_company(callback: CallbackQuery):
 @dp.callback_query(F.data == "game_rules")
 async def game_rules(callback: CallbackQuery):
     await callback.message.edit_text(
-        "📘 <b>EMPIRE CENTURY — PLAYER GUIDE</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
-        "🚀 <b>1. Start your empire</b>\n"
-        "Tap <b>Start my company</b> to begin with 1,000 cash. Your business generates income over time; tap <b>Collect income</b> to claim it (up to 8 hours per collection).\n\n"
-        "🏢 <b>2. Upgrade & produce</b>\n"
-        "Business upgrades increase your level and cash production. Check the price before upgrading and keep enough cash for your next investment.\n\n"
-        "💎 <b>3. Net worth & rankings</b>\n"
-        "Your net worth is calculated from cash, stocks, gold and owned assets. Rankings use net worth first, then reputation as a tie-breaker.\n\n"
-        "🚘 <b>4. Assets, gold & stocks</b>\n"
-        "Browse assets with /assetshop; buy with /buyasset sports_car; view /inventory. Gold: /gold buy 2 or /gold sell 1 (1,000 cash per gram). Stocks: /stocks, then /stock buy ECOR 10 or /stock sell ECOR 2.\n\n"
-        "🏭 <b>5. Industry & employees</b>\n"
-        "Use /industry to browse buildings and /buildindustry workshop to buy one. Use /hire TELEGRAM_ID to send an employee offer and /hireaccept CHALLENGE_ID to accept one.\n\n"
-        "🏰 <b>6. Clubs</b>\n"
-        "Use /club to view your club, /club create Empire Crew | EC to create one, /club join EC to join, and /donate 1000 to contribute to the club treasury.\n\n"
-        "🏛️ <b>7. Live club battles</b>\n"
-        "Unlock at business level <b>12</b>. Tap <b>JOIN CLUB BATTLE</b> when the queue opens. Matchmaking requires an opponent at the same business level and avoids rematching the same opponent. Each player secretly picks one of 9 boxes within <b>15 seconds</b>. 💰 beats ⚪; ⚪ beats 🕳; 💰 beats 🕳. First to <b>2 round wins</b> wins the match; a maximum of 3 rounds is played. Win against two different opponents to unlock upgrades.\n\n"
-        "⛏️ <b>8. Scheduled group mining</b>\n"
-        "Groups are for mining only. Add the bot to a group and run /miningwar to register it. A mining lobby opens every <b>2 hours</b> and stays open for <b>5 minutes</b>. Players must /start the bot in private chat before joining. Fewer than 3 applicants means the event is skipped. With 3–4 applicants, the top 3 by net worth qualify; with 5 or more, the top 5 qualify.\n\n"
-        "⚔️ <b>9. Cross-group mining wars</b>\n"
-        "A team waits for four other real teams from four different groups with the same team size. Each matchup has a simultaneous <b>15-second</b> box-pick window: 💰 adds 20% temporary net worth, ⚪ leaves it unchanged, and 🕳 reduces it by 20%. A 3-player team must win all 3 individual comparisons; a 5-player team must win at least 3. Your team must win <b>all four matchups</b> to win the overall war—one lost matchup ends the war.\n\n"
-        "🏁 <b>10. Seasons & fair play</b>\n"
-        "Seasons last 7 days. At settlement, temporary cash and business progress reset while reputation and eligible permanent assets persist. Purchases and upgrades cost in-game cash—read confirmation messages before spending.\n\n"
-        "⏰ Use /events to refresh the mining and club countdowns. Use /help for commands. Good luck building your empire! 🚀",
+        "📘 <b>EMPIRE CENTURY · RULEBOOK</b>\\n"
+        "━━━━━━━━━━━━━━━━━━\\n"
+        "Choose a section to see only the rules relevant to that activity.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🏠 Dashboard", callback_data="dashboard"),
-             InlineKeyboardButton(text="⏳ Events", callback_data="events_refresh")],
+            [InlineKeyboardButton(text="🏢 Business", callback_data="rule_business"),
+             InlineKeyboardButton(text="💰 Economy", callback_data="rule_economy")],
+            [InlineKeyboardButton(text="🏰 Club Battles", callback_data="rule_club")],
+            [InlineKeyboardButton(text="⛏️ Mining", callback_data="rule_mining")],
+            [InlineKeyboardButton(text="🔙 Back", callback_data="dashboard"),
+             InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
         ]))
     await callback.answer()
 
+
+@dp.callback_query(F.data.in_({"rule_business", "rule_economy", "rule_club", "rule_mining"}))
+async def contextual_rules(callback: CallbackQuery):
+    sections = {
+        "rule_business": (
+            "🏢 <b>BUSINESS RULES</b>\\n\\n"
+            "• Your business generates cash automatically.\\n"
+            "• Collect income to claim earnings, capped at 8 hours per collection.\\n"
+            "• Upgrades cost in-game cash and increase production.\\n"
+            "• From level 12 onward, each upgrade requires two club-battle wins."
+        ),
+        "rule_economy": (
+            "💰 <b>ECONOMY RULES</b>\\n\\n"
+            "• Treasury is your spendable cash.\\n"
+            "• Gold, stocks, and eligible assets contribute to net worth.\\n"
+            "• Check prices and confirmation messages before spending.\\n"
+            "• Seasons last 7 days; temporary progress resets at settlement while eligible permanent progress persists."
+        ),
+        "rule_club": (
+            "🏰 <b>CLUB BATTLE RULES</b>\\n\\n"
+            "• Club battle access unlocks at business level 12.\\n"
+            "• The queue opens hourly.\\n"
+            "• Matchmaking pairs players at the same business level.\\n"
+            "• Each round gives players 15 seconds to pick a box.\\n"
+            "• Win two different opponents to satisfy the battle-win requirement."
+        ),
+        "rule_mining": (
+            "⛏️ <b>MINING RULES</b>\\n\\n"
+            "• Mining lobbies open every 2 hours for 5 minutes.\\n"
+            "• Players must start the bot in private chat before joining.\\n"
+            "• At least 3 applicants are required.\\n"
+            "• With 3–4 applicants, the top 3 by net worth qualify; with 5+, the top 5 qualify.\\n"
+            "• Groups are used for mining activities."
+        ),
+    }
+    await callback.message.edit_text(
+        sections[callback.data],
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📘 All Rules", callback_data="game_rules")],
+            [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
+             InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
+        ]))
+    await callback.answer()
 
 @dp.message(Command('empire'))
 async def empire(message: Message):
@@ -205,17 +249,21 @@ async def empire(message: Message):
 @dp.callback_query(F.data == "more_menu")
 async def more_menu(callback: CallbackQuery):
     await callback.message.edit_text(
-        "🧭 <b>EMPIRE CONTROL CENTER</b>\n━━━━━━━━━━━━━━━━━━\nChoose what you want to manage:",
+        "🌈 <b>EMPIRE CONTROL CENTER</b>\\n"
+        "━━━━━━━━━━━━━━━━━━\\n"
+        "Choose a department. Each section opens its own focused screen.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="💰 Collect income", callback_data="collect"),
-             InlineKeyboardButton(text="⬆️ Upgrade business", callback_data="upgrade")],
-            [InlineKeyboardButton(text="🏆 Leaderboard", callback_data="ranking")],
-            [InlineKeyboardButton(text="🪙 Gold & markets", callback_data="help_gold"),
+            [InlineKeyboardButton(text="⬆️ Upgrade Business", callback_data="upgrade"),
+             InlineKeyboardButton(text="🏆 FOSBU List", callback_data="ranking")],
+            [InlineKeyboardButton(text="🪙 Gold & Markets", callback_data="help_gold"),
              InlineKeyboardButton(text="🏭 Industry", callback_data="help_industry")],
-            [InlineKeyboardButton(text="🏠 Dashboard", callback_data="dashboard")],
+            [InlineKeyboardButton(text="🏰 Club", callback_data="help_club"),
+             InlineKeyboardButton(text="📘 Rules", callback_data="game_rules")],
+            [InlineKeyboardButton(text="⛏️ Mining Rules", callback_data="rule_mining")],
+            [InlineKeyboardButton(text="🔙 Back to My Empire", callback_data="my_empire"),
+             InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
         ]))
     await callback.answer()
-
 
 @dp.callback_query(F.data == 'dashboard')
 async def dashboard(callback: CallbackQuery):
@@ -234,6 +282,18 @@ async def dashboard(callback: CallbackQuery):
     await callback.answer()
 
 
+@dp.callback_query(F.data == "my_empire")
+async def my_empire(callback: CallbackQuery):
+    p = await get_player(callback.from_user.id)
+    if not p:
+        await callback.answer("Run /start first.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        dashboard_text(p, await net_worth(callback.from_user.id)),
+        reply_markup=my_empire_keyboard(),
+    )
+    await callback.answer()
+
 @dp.callback_query(F.data == 'collect')
 async def collect(callback: CallbackQuery):
     if not await get_player(callback.from_user.id):
@@ -241,16 +301,16 @@ async def collect(callback: CallbackQuery):
         return
     industry_rep = await settle_industry(callback.from_user.id)
     amount, shared = await collect_income(callback.from_user.id)
-    suffix = f'\n👑 Boss share paid: {shared:,} cash.' if shared else ''
+    suffix = f'\\n👑 Boss share paid: {shared:,} cash.' if shared else ''
     if industry_rep:
-        suffix += f'\n🏭 Industrial reputation settled: +{industry_rep:,}.'
+        suffix += f'\\n🏭 Industrial reputation settled: +{industry_rep:,}.'
+    # Give a clear chat confirmation while keeping the navigation screen available.
+    await callback.message.answer(f'💚 <b>Income collected: {amount:,} cash!</b>{suffix}')
     p = await get_player(callback.from_user.id)
     await callback.message.edit_text(
-        f'💰 <b>Income collected: {amount:,} cash</b>{suffix}\n\n' +
         dashboard_text(p, await net_worth(callback.from_user.id)),
-        reply_markup=main_menu())
+        reply_markup=my_empire_keyboard())
     await callback.answer('Income collected')
-
 
 @dp.callback_query(F.data == 'upgrade')
 async def upgrade(callback: CallbackQuery):
@@ -784,10 +844,51 @@ async def help_industry(callback: CallbackQuery):
 @dp.callback_query(F.data == 'help_club')
 async def help_club(callback: CallbackQuery):
     await callback.message.edit_text(
-        '🏰 /club — view your club\n/club create Empire Crew | EC\n/club join EC\n/donate 1000',
-        reply_markup=main_menu())
+        '🏰 <b>CLUB CONTROL</b>\\n\\n'
+        'Use /club to view your club.\\n'
+        'Create one: /club create Empire Crew | EC\\n'
+        'Join one: /club join EC\\n'
+        'Donate: /donate 1000\\n\\n'
+        'Club battle queue opens hourly; battle access unlocks at business level 12.',
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🏰 Club Rules", callback_data="rule_club")],
+            [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
+             InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
+        ]))
     await callback.answer()
 
+
+@dp.callback_query(F.data == 'help_gold')
+async def help_gold(callback: CallbackQuery):
+    await callback.message.edit_text(
+        '🪙 <b>GOLD EXCHANGE</b>\\n'
+        'Rate: 1,000 cash per gram.\\n'
+        'Buy: /gold buy 2\\n'
+        'Sell: /gold sell 1',
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📘 Economy Rules", callback_data="rule_economy")],
+            [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
+             InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
+        ]))
+    await callback.answer()
+
+
+@dp.callback_query(F.data == 'help_assets')
+async def help_assets(callback: CallbackQuery):
+    await callback.message.edit_text(
+        '🏬 <b>ASSET COLLECTION</b>\\n'
+        'Browse /assetshop, buy with /buyasset sports_car, and check your collection with /inventory.',
+        reply_markup=back_home_keyboard("more_menu"))
+    await callback.answer()
+
+
+@dp.callback_query(F.data == 'help_industry')
+async def help_industry(callback: CallbackQuery):
+    await callback.message.edit_text(
+        '🏭 <b>INDUSTRY</b>\\n'
+        'View buildings with /industry and buy one with /buildindustry workshop. Buildings generate reputation over time.',
+        reply_markup=back_home_keyboard("more_menu"))
+    await callback.answer()
 
 async def main():
     await connect()
