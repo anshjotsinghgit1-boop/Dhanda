@@ -13,7 +13,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
-from app.economy import register_player, get_player, collect_income, upgrade_business, production_per_second, upgrade_cost
+from app.economy import register_player, get_player, collect_income, auto_upgrade_business, production_per_second, upgrade_cost
 from app.keyboards import main_menu, my_empire_keyboard, back_home_keyboard
 from app.seasons import season_scheduler
 from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry, resume_industry
@@ -71,18 +71,25 @@ def dashboard_text(p, worth: int | None = None) -> str:
     cash = int(p["cash"])
     rate = production_per_second(level)
     if level >= 54:
-        milestone = "🏆 <b>MAX LEVEL REACHED</b> · Your business is fully upgraded."
+        milestone = "🏆 <b>EMPIRE FULLY MAXED</b> · Level 54 unlocked."
     else:
         cost = upgrade_cost(level)
-        shortfall = max(0, cost - cash)
         progress = min(100, int(cash * 100 / cost)) if cost else 100
-        milestone = (
-            f"🎯 <b>NEXT MILESTONE · LEVEL {level + 1}</b>\n"
-            f"Upgrade cost: <b>{cost:,}</b> cash · "
-            + (f"<b>{shortfall:,}</b> more needed" if shortfall else "Ready to upgrade")
-            + f"\nProgress: <b>{progress}%</b>"
+        filled = min(10, int(progress / 10))
+        bar = "🟩" * filled + "▫️" * (10 - filled)
+        shortfall = max(0, cost - cash)
+        wins = int(p["club_battle_wins"] or 0) if "club_battle_wins" in p.keys() else 0
+        battle_locked = level >= 12 and wins < 2
+        target_status = f"🏛 Win {2 - wins} more club battle(s) to unlock this level." if battle_locked else (
+            "✨ Target reached — level-up is automatic!" if shortfall == 0 else f"💰 <b>{shortfall:,}</b> cash to go"
         )
-    extra = f'\n🏆 Net worth: <b>{worth:,}</b>' if worth is not None else ''
+        milestone = (
+            f"🚀 <b>NEXT TARGET · LEVEL {level + 1}</b>\n"
+            f"{bar}  <b>{progress}%</b>\n"
+            f"🎯 Target: <b>{cost:,}</b> cash\n"
+            f"{target_status}"
+        )
+    extra = f'\n💎 <b>Net worth: {worth:,}</b>' if worth is not None else ''
     return (
         '🏛 <b>EMPIRE CENTURY</b>\n'
         '━━━━━━━━━━━━━━━━━━\n'
@@ -94,7 +101,7 @@ def dashboard_text(p, worth: int | None = None) -> str:
         f'⭐ Reputation: <b>{p["reputation"]:,}</b>\n'
         f'🏢 Business level: <b>{level}/54</b>'
         f'{extra}\n\n{milestone}\n\n'
-        '💡 <i>Build smart. Invest wisely. Grow your empire.</i>'
+        '💡 <i>Grow your treasury to the target. Your empire levels up automatically.</i>'
     )
 
 async def ensure_player(user) -> bool:
@@ -116,6 +123,8 @@ async def start(message: Message):
         return
     p = await get_player(message.from_user.id)
     if p:
+        await auto_upgrade_business(message.from_user.id)
+        p = await get_player(message.from_user.id)
         await message.answer(dashboard_text(p, await net_worth(message.from_user.id)),
                              reply_markup=main_menu())
         return
@@ -169,6 +178,7 @@ async def events_refresh(callback: CallbackQuery):
 @dp.callback_query(F.data == "start_company")
 async def start_company(callback: CallbackQuery):
     await register_player(callback.from_user)
+    await auto_upgrade_business(callback.from_user.id)
     p = await get_player(callback.from_user.id)
     await callback.message.edit_text(
         "✅ <b>Your company is open!</b>\n\n" + dashboard_text(
@@ -253,13 +263,12 @@ async def more_menu(callback: CallbackQuery):
         "━━━━━━━━━━━━━━━━━━\n"
         "Choose a department. Each section opens its own focused screen.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬆️ Upgrade Business", callback_data="upgrade", style="success"),
-             InlineKeyboardButton(text="🏆 FOSBU List", callback_data="ranking", style="primary")],
-            [InlineKeyboardButton(text="🪙 Gold & Markets", callback_data="help_gold", style="success"),
-             InlineKeyboardButton(text="🏭 Industry", callback_data="help_industry", style="primary")],
-            [InlineKeyboardButton(text="🏰 Club", callback_data="help_club", style="primary"),
-             InlineKeyboardButton(text="📘 Rules", callback_data="game_rules", style="primary")],
-            [InlineKeyboardButton(text="⛏️ Mining Rules", callback_data="rule_mining", style="primary")],
+            [InlineKeyboardButton(text="🏆 FOSBU List", callback_data="ranking", style="primary"),
+             InlineKeyboardButton(text="🪙 Gold & Markets", callback_data="help_gold", style="success")],
+            [InlineKeyboardButton(text="🏭 Industry", callback_data="help_industry", style="primary"),
+             InlineKeyboardButton(text="🏰 Club", callback_data="help_club", style="primary")],
+            [InlineKeyboardButton(text="📘 Rules", callback_data="game_rules", style="primary"),
+             InlineKeyboardButton(text="⛏️ Mining Rules", callback_data="rule_mining", style="success")],
             [InlineKeyboardButton(text="🔙 Back to My Empire", callback_data="my_empire", style="primary"),
              InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
         ]))
@@ -271,6 +280,8 @@ async def dashboard(callback: CallbackQuery):
     if not p:
         await callback.answer('Run /start first.', show_alert=True)
         return
+    await auto_upgrade_business(callback.from_user.id)
+    p = await get_player(callback.from_user.id)
     try:
         await callback.message.edit_text(
             dashboard_text(p, await net_worth(callback.from_user.id)),
@@ -288,6 +299,8 @@ async def my_empire(callback: CallbackQuery):
     if not p:
         await callback.answer("Run /start first.", show_alert=True)
         return
+    await auto_upgrade_business(callback.from_user.id)
+    p = await get_player(callback.from_user.id)
     await callback.message.edit_text(
         dashboard_text(p, await net_worth(callback.from_user.id)),
         reply_markup=my_empire_keyboard(),
@@ -301,10 +314,13 @@ async def collect(callback: CallbackQuery):
         return
     industry_rep = await settle_industry(callback.from_user.id)
     amount, shared = await collect_income(callback.from_user.id)
+    level_ups = await auto_upgrade_business(callback.from_user.id)
     suffix = f'\n👑 Boss share paid: {shared:,} cash.' if shared else ''
     if industry_rep:
         suffix += f'\n🏭 Industrial reputation settled: +{industry_rep:,}.'
-    # Give a clear chat confirmation while keeping the navigation screen available.
+    if level_ups:
+        suffix += '\n\n' + '\n'.join(level_ups)
+    # Keep the empire screen in place; show collection and automatic level-ups separately.
     await callback.message.answer(f'💚 <b>Income collected: {amount:,} cash!</b>{suffix}')
     p = await get_player(callback.from_user.id)
     await callback.message.edit_text(
