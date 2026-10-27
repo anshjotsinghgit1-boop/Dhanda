@@ -62,6 +62,8 @@ async def _resolve(bot: Bot, match_id: int, timed_out: bool = False):
                     loser = m["player_b"] if match_winner == m["player_a"] else m["player_a"]
                     await conn.execute("UPDATE players SET club_battle_wins=club_battle_wins+1 WHERE telegram_id=$1", match_winner)
                     await conn.execute("UPDATE players SET club_battle_wins=0 WHERE telegram_id=$1", loser)
+                else:
+                    await conn.execute("UPDATE players SET club_battle_wins=0 WHERE telegram_id IN ($1,$2)", m["player_a"], m["player_b"])
                 await conn.execute("INSERT INTO club_battles(player_a,player_b,match_number,round_number,wins_a,wins_b,status,finished_at) VALUES($1,$2,1,$3,$4,$5,'finished',NOW())", m["player_a"], m["player_b"], rn, wa, wb)
             else:
                 await conn.execute("UPDATE club_live_matches SET round_number=$1,wins_a=$2,wins_b=$3,picked_a=NULL,picked_b=NULL,deadline_at=NOW()+INTERVAL '15 seconds' WHERE id=$4", rn+1, wa, wb, match_id)
@@ -120,8 +122,16 @@ def register_club_live_handlers(bot: Bot, dp: Dispatcher):
             name_map = {r["telegram_id"]: r["display_name"] for r in names}
         intro = f"🏛 <b>LIVE CLUB BATTLE #{match_id}</b>\n{ name_map.get(c.from_user.id,'Player') } vs { name_map.get(other,'Player') }\n\nOpen one box in {ROUND_SECONDS} seconds. 💰 beats ⚪, ⚪ beats 🕳, 💰 beats 🕳. First to 2 round wins takes the match. Queue again to face a different opponent."
         for pid in (c.from_user.id, other):
-            try: await bot.send_message(pid, intro, reply_markup=boxes(match_id))
-            except Exception: pass
+            try:
+                msg = await bot.send_message(pid, "🏛 <b>CLUB BATTLE</b>\nPreparing.")
+                for dots in ("Preparing..", "Preparing..."):
+                    await asyncio.sleep(0.25)
+                    await msg.edit_text("🏛 <b>CLUB BATTLE</b>\n" + dots)
+                await msg.edit_text(intro, reply_markup=boxes(match_id))
+            except Exception:
+                pass
+        async with get_pool().acquire() as conn:
+            await conn.execute("UPDATE club_live_matches SET deadline_at=NOW()+INTERVAL '15 seconds' WHERE id=$1 AND status='active'", match_id)
         await c.answer("Opponent found! Check your private chat with the bot.", show_alert=True)
 
     @dp.callback_query(F.data.startswith("clbp_"))
