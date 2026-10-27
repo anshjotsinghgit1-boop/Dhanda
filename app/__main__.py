@@ -13,7 +13,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
-from app.economy import register_player, get_player, collect_income, auto_upgrade_business, production_per_second, upgrade_cost
+from app.economy import register_player, get_player, collect_income, auto_upgrade_business, upgrade_business, production_per_second, upgrade_cost
 from app.keyboards import main_menu, my_empire_keyboard, back_home_keyboard
 from app.seasons import season_scheduler
 from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry, resume_industry
