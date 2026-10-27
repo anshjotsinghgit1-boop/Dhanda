@@ -16,7 +16,10 @@ async def register_mining_group(chat_id: int, title: str):
         await conn.execute('INSERT INTO mining_groups(chat_id,title) VALUES($1,$2) ON CONFLICT(chat_id) DO UPDATE SET title=EXCLUDED.title', chat_id, (title or 'Mining group')[:120])
 
 def join_kb(event_id):
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⛏ JOIN MINING", callback_data=f"tmj_{event_id}")]])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⛏ JOIN MINING", callback_data=f"tmj_{event_id}", style="success")],
+        [InlineKeyboardButton(text="🏆 TOP MINING GROUPS", callback_data="top_mining_groups", style="primary")]
+    ])
 
 def boxes_kb(prefix, event_id, round_no):
     return InlineKeyboardMarkup(inline_keyboard=[
