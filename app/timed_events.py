@@ -139,6 +139,12 @@ def register_timed_handlers(bot: Bot, dp: Dispatcher):
             player = await conn.fetchval("SELECT 1 FROM players WHERE telegram_id=$1", c.from_user.id)
             if not event or not player:
                 await c.answer("Mining is closed, or you need to /start the bot in DM first.", show_alert=True); return
+            await conn.execute(
+                """INSERT INTO mining_group_members(chat_id,player_id,last_seen_at)
+                   SELECT $1,telegram_id,NOW() FROM players WHERE telegram_id=$2
+                   ON CONFLICT(chat_id,player_id) DO UPDATE SET last_seen_at=NOW()""",
+                c.message.chat.id, c.from_user.id,
+            )
             await conn.execute("INSERT INTO timed_mining_players(event_id,player_id) VALUES($1,$2) ON CONFLICT DO NOTHING", event_id, c.from_user.id)
             count = await conn.fetchval("SELECT COUNT(*) FROM timed_mining_players WHERE event_id=$1", event_id)
         await c.answer(f"Joined mining! {count} player(s) joined.")
