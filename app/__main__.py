@@ -2,6 +2,7 @@ import asyncio
 import logging
 import json
 import random
+import time
 from decimal import Decimal, InvalidOperation
 
 from aiogram import Bot, Dispatcher, F
@@ -32,7 +33,7 @@ register_timed_handlers(bot, dp)
 register_club_live_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
-@dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"), ~F.text.startswith("/rank"))
+@dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"), ~F.text.startswith("/rank"), ~F.text.startswith("/events"))
 async def group_mining_only_guard(message: Message):
     await message.answer("⛏ This group is for mining only. Use /miningwar to open a mining lobby; use the bot in private chat for all other game features.")
 
@@ -42,17 +43,42 @@ async def group_non_mining_button_guard(callback: CallbackQuery):
     await callback.answer("Only mining buttons work in group chats. Open the bot in private chat for other features.", show_alert=True)
 
 
+def countdown_label(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m {secs:02d}s"
+    return f"{secs}s"
+
+
+def event_countdown_text() -> str:
+    now = int(time.time())
+    mining_remaining = 7200 - (now % 7200)
+    club_remaining = 3600 - (now % 3600)
+    return (
+        "⏳ <b>UPCOMING EVENTS</b>\n"
+        f"⛏️ Next mining lobby: <b>{countdown_label(mining_remaining)}</b> · 2-hour cycle\n"
+        f"🏛️ Club battle queue: <b>{countdown_label(club_remaining)}</b> · hourly cycle\n"
+        "Use /events anytime to refresh these countdowns."
+    )
+
+
 def dashboard_text(p, worth: int | None = None) -> str:
     extra = f'\n🏆 Net worth: <b>{worth:,}</b>' if worth is not None else ''
-    return (f'🏛 <b>EMPIRE CENTURY</b>\n\n'
-            f'👤 {p["display_name"]}\n'
+    return (f'🏛 <b>EMPIRE CENTURY</b>\n'
+            f'━━━━━━━━━━━━━━━━━━\n'
+            f'👤 <b>{p["display_name"]}</b>\n\n'
             f'💵 Cash: <b>{p["cash"]:,}</b>\n'
             f'🪙 Gold: <b>{p["gold_grams"] if "gold_grams" in p else 0} g</b>\n'
             f'📈 Stocks: <b>{p["stocks"] if "stocks" in p else 0:,}</b>\n'
             f'⭐ Reputation: <b>{p["reputation"]:,}</b>\n'
             f'🏢 Business level: <b>{p["business_level"]}/54</b>\n'
-            f'⚙️ Production: <b>{production_per_second(p["business_level"]):,} cash/second</b>'
-            f'{extra}\n\nBuild your empire one upgrade at a time.')
+            f'⚙️ Production: <b>{production_per_second(p["business_level"]):,} cash/sec</b>'
+            f'{extra}\n\n{event_countdown_text()}\n\n'
+            '💡 <i>Build smart. Invest wisely. Grow your empire.</i>')
 
 
 async def ensure_player(user) -> bool:
@@ -85,6 +111,17 @@ async def start(message: Message):
         reply_markup=welcome_keyboard())
 
 
+@dp.message(Command("events"))
+async def events_command(message: Message):
+    await message.answer(
+        "🗓️ <b>EMPIRE EVENT SCHEDULE</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        + event_countdown_text()
+        + "\n\n⛏️ <b>Mining</b> — lobby stays open for 5 minutes. At least 3 applicants are needed; the strongest 3 qualify from 3–4 applicants, or the strongest 5 qualify from 5+.\n\n"
+        "🏛️ <b>Club battles</b> — unlock at business level 12. Matchmaking pairs players at the same business level; each round has a 15-second pick window."
+    )
+
+
 @dp.callback_query(F.data == "start_company")
 async def start_company(callback: CallbackQuery):
     await register_player(callback.from_user)
@@ -99,29 +136,29 @@ async def start_company(callback: CallbackQuery):
 @dp.callback_query(F.data == "game_rules")
 async def game_rules(callback: CallbackQuery):
     await callback.message.answer(
-        "📘 <b>BUSINESS LIFE — HOW TO PLAY</b>\n\n"
-        "<b>1. Start and grow</b>\n"
-        "Tap “Start my company” to begin with 1,000 cash. Your company produces cash over time. Tap “Collect income” to claim what has built up. Income is not added to your cash display until you collect it.\n\n"
-        "<b>2. Upgrade your business</b>\n"
-        "Upgrades increase your business level and production. Each upgrade costs cash; the bot tells you the price before you can afford it. Keep some cash available so you can invest in the next level.\n\n"
-        "<b>3. Net worth and ranking</b>\n"
-        "Net worth is the estimated value of your cash, investments, gold, and owned assets. The ranking compares players by net worth, with reputation used as a tie-breaker.\n\n"
-        "<b>4. Assets</b>\n"
-        "Use /assetshop to see items for sale, /buyasset sports_car to buy one, and /inventory to view your collection. The shop shows each item's price and net-worth value.\n\n"
-        "<b>5. Gold</b>\n"
-        "Gold costs 1,000 cash per gram. Use /gold buy 2 to buy 2 grams or /gold sell 1 to sell 1 gram. Check your cash before buying.\n\n"
-        "<b>6. Industry</b>\n"
-        "Use /industry to view industrial buildings, their cost, reputation earned per hour, and level requirement. Buy one with /buildindustry workshop. Use /resumeindustry if industry pauses after a season rollover.\n\n"
-        "<b>7. Clubs</b>\n"
-        "Use /club to check your club, /club create Empire Crew | EC to create one, or /club join EC to join one. /donate 1000 adds cash to your club treasury.\n\n"
-        "<b>8. Stocks</b>\n"
-        "Use /stocks to view share prices and your holdings. Example: /stock buy ECOR 10. Sell shares with /stock sell ECOR 2.\n\n"
-        "<b>9. Mining events</b>\n"
-        "A group admin/member can register a Telegram group with /miningwar. Mining events open automatically every 2 hours with a 5-minute join window. Join from the event button and use /miningstatus to view the group event.\n\n"
-        "<b>10. Seasons and fair play</b>\n"
-        "Seasons last 7 days. At settlement, temporary cash and business progress reset; reputation and eligible permanent assets persist. Check messages before spending: purchases and upgrades are not free.\n\n"
-        "<b>Quick start</b>\n"
-        "1) Start your company.  2) Collect income.  3) Upgrade when you can afford it.  4) Explore assets, gold, stocks, industry, and clubs as you grow.",
+        "📘 <b>EMPIRE CENTURY — PLAYER GUIDE</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🚀 <b>1. Start your empire</b>\n"
+        "Tap <b>Start my company</b> to begin with 1,000 cash. Your business generates income over time; tap <b>Collect income</b> to claim it (up to 8 hours per collection).\n\n"
+        "🏢 <b>2. Upgrade & produce</b>\n"
+        "Business upgrades increase your level and cash production. Check the price before upgrading and keep enough cash for your next investment.\n\n"
+        "💎 <b>3. Net worth & rankings</b>\n"
+        "Your net worth is calculated from cash, stocks, gold and owned assets. Rankings use net worth first, then reputation as a tie-breaker.\n\n"
+        "🚘 <b>4. Assets, gold & stocks</b>\n"
+        "Browse assets with /assetshop; buy with /buyasset sports_car; view /inventory. Gold: /gold buy 2 or /gold sell 1 (1,000 cash per gram). Stocks: /stocks, then /stock buy ECOR 10 or /stock sell ECOR 2.\n\n"
+        "🏭 <b>5. Industry & employees</b>\n"
+        "Use /industry to browse buildings and /buildindustry workshop to buy one. Use /hire TELEGRAM_ID to send an employee offer and /hireaccept CHALLENGE_ID to accept one.\n\n"
+        "🏰 <b>6. Clubs</b>\n"
+        "Use /club to view your club, /club create Empire Crew | EC to create one, /club join EC to join, and /donate 1000 to contribute to the club treasury.\n\n"
+        "🏛️ <b>7. Live club battles</b>\n"
+        "Unlock at business level <b>12</b>. Tap <b>JOIN CLUB BATTLE</b> when the queue opens. Matchmaking requires an opponent at the same business level and avoids rematching the same opponent. Each player secretly picks one of 9 boxes within <b>15 seconds</b>. 💰 beats ⚪; ⚪ beats 🕳; 💰 beats 🕳. First to <b>2 round wins</b> wins the match; a maximum of 3 rounds is played. Win against two different opponents to unlock upgrades.\n\n"
+        "⛏️ <b>8. Scheduled group mining</b>\n"
+        "Groups are for mining only. Add the bot to a group and run /miningwar to register it. A mining lobby opens every <b>2 hours</b> and stays open for <b>5 minutes</b>. Players must /start the bot in private chat before joining. Fewer than 3 applicants means the event is skipped. With 3–4 applicants, the top 3 by net worth qualify; with 5 or more, the top 5 qualify.\n\n"
+        "⚔️ <b>9. Cross-group mining wars</b>\n"
+        "A team waits for four other real teams from four different groups with the same team size. Each matchup has a simultaneous <b>15-second</b> box-pick window: 💰 adds 20% temporary net worth, ⚪ leaves it unchanged, and 🕳 reduces it by 20%. A 3-player team must win all 3 individual comparisons; a 5-player team must win at least 3. Your team must win <b>all four matchups</b> to win the overall war—one lost matchup ends the war.\n\n"
+        "🏁 <b>10. Seasons & fair play</b>\n"
+        "Seasons last 7 days. At settlement, temporary cash and business progress reset while reputation and eligible permanent assets persist. Purchases and upgrades cost in-game cash—read confirmation messages before spending.\n\n"
+        "⏰ Use /events to refresh the mining and club countdowns. Use /help for commands. Good luck building your empire! 🚀",
         reply_markup=welcome_keyboard())
     await callback.answer()
 
