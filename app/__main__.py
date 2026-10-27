@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from html import escape
 import json
 import random
 import time
@@ -24,21 +25,23 @@ from app.employees import send_challenge, accept_challenge
 from app.stocks import quotes, holdings, trade
 from app.mining_wars import create_war, join_team, war_snapshot, start_fight, cancel_war
 from app.timed_events import register_timed_handlers, timed_scheduler, register_mining_group
+from app.mining_rewards import MiningGroupMemberTracker, top_mining_groups
 from app.club_live import register_club_live_handlers
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
+dp.message.middleware(MiningGroupMemberTracker())
 register_timed_handlers(bot, dp)
 register_club_live_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
-@dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"), ~F.text.startswith("/rank"), ~F.text.startswith("/events"))
+@dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"), ~F.text.startswith("/rank"), ~F.text.startswith("/events"), ~F.text.startswith("/topgroups"))
 async def group_mining_only_guard(message: Message):
     await message.answer("⛏ This group is for mining only. Use /miningwar to open a mining lobby; use the bot in private chat for all other game features.")
 
 
-@dp.callback_query(F.message.chat.type.in_({"group", "supergroup"}), ~F.data.startswith("mine_"), ~F.data.startswith("box_"))
+@dp.callback_query(F.message.chat.type.in_({"group", "supergroup"}), ~F.data.startswith("mine_"), ~F.data.startswith("box_"), F.data != "top_mining_groups")
 async def group_non_mining_button_guard(callback: CallbackQuery):
     await callback.answer("Only mining buttons work in group chats. Open the bot in private chat for other features.", show_alert=True)
 
@@ -163,6 +166,44 @@ def events_keyboard() -> InlineKeyboardMarkup:
 @dp.message(Command("events"))
 async def events_command(message: Message):
     await message.answer(events_text(), reply_markup=events_keyboard())
+
+
+async def top_mining_groups_text() -> str:
+    rows = await top_mining_groups(10)
+    if not rows:
+        return ("🏆 <b>TOP MINING GROUPS</b>\\n\\nNo group data yet. "
+                "The bot records known players as they use registered groups.")
+    lines = ["🏆 <b>TOP MINING GROUPS BY COMBINED NET WORTH</b>",
+             "━━━━━━━━━━━━━━━━━━",
+             "<i>Based on registered players the bot has observed in each group.</i>"]
+    for i, row in enumerate(rows, 1):
+        bonus = " · 💰 +15% active" if row["has_active_bonus"] else ""
+        lines.append(f"{i}. <b>{escape(str(row['title']))}</b>\\n"
+                     f"   💎 {int(row['total_worth'] or 0):,} total net worth · "
+                     f"👥 {int(row['player_count'] or 0)} known players{bonus}")
+    return "\\n".join(lines)
+
+
+@dp.message(Command("topgroups"))
+async def topgroups_command(message: Message):
+    await message.answer(await top_mining_groups_text(), reply_markup=InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data="top_mining_groups")],
+                         [InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")]]
+    ))
+
+
+@dp.callback_query(F.data == "top_mining_groups")
+async def topgroups_callback(callback: CallbackQuery):
+    text = await top_mining_groups_text()
+    try:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data="top_mining_groups")],
+                             [InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")]]
+        ))
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
+    await callback.answer("Mining group rankings refreshed")
 
 
 @dp.callback_query(F.data == "events_refresh")
