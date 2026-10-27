@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from aiogram import Bot, Dispatcher, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.client.default import DefaultBotProperties
 
 from app.config import BOT_TOKEN
@@ -33,6 +33,13 @@ bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 dp.message.middleware(MiningGroupMemberTracker())
 register_timed_handlers(bot, dp)
+
+@dp.my_chat_member()
+async def register_group_when_bot_added(event: ChatMemberUpdated):
+    if event.chat.type not in ("group", "supergroup"):
+        return
+    if event.new_chat_member.status in ("member", "administrator"):
+        await register_mining_group(event.chat.id, event.chat.title or "Mining group")
 register_club_live_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
