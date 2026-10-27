@@ -80,12 +80,6 @@ async def timed_scheduler(bot: Bot):
             raise
         except Exception:
             log.exception("Timed event scheduler error")
-        try:
-            await club_battle_tick(bot)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("Club battle timeout processing failed")
         await asyncio.sleep(5)
 
 def register_timed_handlers(bot: Bot, dp: Dispatcher):
