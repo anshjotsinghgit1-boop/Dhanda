@@ -202,6 +202,21 @@ async def empire(message: Message):
     await message.answer(dashboard_text(p, await net_worth(message.from_user.id)), reply_markup=main_menu())
 
 
+@dp.callback_query(F.data == "more_menu")
+async def more_menu(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "🧭 <b>EMPIRE CONTROL CENTER</b>\n━━━━━━━━━━━━━━━━━━\nChoose what you want to manage:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💰 Collect income", callback_data="collect"),
+             InlineKeyboardButton(text="⬆️ Upgrade business", callback_data="upgrade")],
+            [InlineKeyboardButton(text="🏆 Leaderboard", callback_data="ranking")],
+            [InlineKeyboardButton(text="🪙 Gold & markets", callback_data="help_gold"),
+             InlineKeyboardButton(text="🏭 Industry", callback_data="help_industry")],
+            [InlineKeyboardButton(text="🏠 Dashboard", callback_data="dashboard")],
+        ]))
+    await callback.answer()
+
+
 @dp.callback_query(F.data == 'dashboard')
 async def dashboard(callback: CallbackQuery):
     p = await get_player(callback.from_user.id)
