@@ -64,7 +64,7 @@ async def _resolve(bot: Bot, match_id: int, timed_out: bool = False):
                     await conn.execute("UPDATE players SET club_battle_wins=0 WHERE telegram_id=$1", loser)
                 await conn.execute("INSERT INTO club_battles(player_a,player_b,match_number,round_number,wins_a,wins_b,status,finished_at) VALUES($1,$2,1,$3,$4,$5,'finished',NOW())", m["player_a"], m["player_b"], rn, wa, wb)
             else:
-                await conn.execute("UPDATE club_live_matches SET round_number=$1,wins_a=$2,wins_b=$3,picked_a=NULL,picked_b=NULL,deadline_at=NOW()+( $4 * INTERVAL '1 second') WHERE id=$5", rn+1, wa, wb, ROUND_SECONDS, match_id)
+                await conn.execute("UPDATE club_live_matches SET round_number=$1,wins_a=$2,wins_b=$3,picked_a=NULL,picked_b=NULL,deadline_at=NOW()+INTERVAL '15 seconds' WHERE id=$4", rn+1, wa, wb, match_id)
             names = await conn.fetch("SELECT telegram_id,display_name FROM players WHERE telegram_id IN ($1,$2)", m["player_a"], m["player_b"])
             names_by_id = {r["telegram_id"]: r["display_name"] for r in names}
     round_line = f"Round {rn}: {ICON.get(ka, '⌛')} vs {ICON.get(kb, '⌛')} — " + (f"{names_by_id.get(winner, 'Player')} wins." if winner else "Draw.")
@@ -114,8 +114,8 @@ def register_club_live_handlers(bot: Bot, dp: Dispatcher):
             await conn.execute("DELETE FROM club_battle_queue WHERE player_id IN ($1,$2)", c.from_user.id, other)
             la, lb = make_layout(f"{c.from_user.id}:{other}:{datetime.now(timezone.utc).timestamp()}"), make_layout(f"{other}:{c.from_user.id}:{datetime.now(timezone.utc).timestamp()}")
             match_id = await conn.fetchval("""INSERT INTO club_live_matches(player_a,player_b,layout_a,layout_b,deadline_at)
-                VALUES($1,$2,$3,$4,NOW()+($5 * INTERVAL '1 second')) RETURNING id""",
-                c.from_user.id, other, json.dumps(la), json.dumps(lb), ROUND_SECONDS)
+                VALUES($1,$2,$3,$4,NOW()+INTERVAL '15 seconds') RETURNING id""",
+                c.from_user.id, other, json.dumps(la), json.dumps(lb))
             names = await conn.fetch("SELECT telegram_id,display_name FROM players WHERE telegram_id IN ($1,$2)", c.from_user.id, other)
             name_map = {r["telegram_id"]: r["display_name"] for r in names}
         intro = f"🏛 <b>LIVE CLUB BATTLE #{match_id}</b>\n{ name_map.get(c.from_user.id,'Player') } vs { name_map.get(other,'Player') }\n\nOpen one box in {ROUND_SECONDS} seconds. 💰 beats ⚪, ⚪ beats 🕳, 💰 beats 🕳. First to 2 round wins takes the match. Queue again to face a different opponent."
