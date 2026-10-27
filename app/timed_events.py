@@ -48,7 +48,7 @@ async def timed_scheduler(bot: Bot):
                     try:
                         async with get_pool().acquire() as conn:
                             event_id = await conn.fetchval("INSERT INTO timed_mining_events(chat_id,opens_at,closes_at) VALUES($1,NOW(),NOW()+INTERVAL '5 minutes') RETURNING id", group["chat_id"])
-                        await bot.send_message(group["chat_id"], f"⛏ <b>MINING OPEN</b> #{event_id}\nJoin within 5 minutes. Minimum 2 players. Choose your boxes in four rounds.", reply_markup=join_kb(event_id))
+                        await bot.send_message(group["chat_id"], f"⛏ <b>MINING OPEN</b> #{event_id}\nJoin within 5 minutes. At least 3 players are required. Top 3 qualify from 3–4 applicants; top 5 qualify from 5 or more.", reply_markup=join_kb(event_id))
                     except Exception:
                         log.exception("Mining event failed for group %s", group["chat_id"])
                 await notify_players(bot, "⛏ Mining has started in your registered groups. You have 5 minutes to join.")
@@ -104,30 +104,3 @@ def register_timed_handlers(bot: Bot, dp: Dispatcher):
             count = await conn.fetchval("SELECT COUNT(*) FROM timed_mining_players WHERE event_id=$1", event_id)
         await c.answer(f"Joined mining! {count} player(s) joined.")
 
-    @dp.callback_query(F.data.startswith("tmr_"))
-    async def mining_box(c: CallbackQuery):
-        _, event_id, round_no, box_no = c.data.split("_")
-        event_id, round_no, box_no = int(event_id), int(round_no), int(box_no)
-        async with get_pool().acquire() as conn:
-            joined = await conn.fetchval("SELECT 1 FROM timed_mining_players WHERE event_id=$1 AND player_id=$2", event_id, c.from_user.id)
-            event = await conn.fetchrow("SELECT status FROM timed_mining_events WHERE id=$1", event_id)
-            if not joined or not event or event["status"] != "fighting":
-                await c.answer("You are not in this mining battle.", show_alert=True); return
-            # A player's nine boxes contain three outcomes of each type per round.
-            from random import Random
-            layout = ["money"]*3 + ["empty"]*3 + ["normal"]*3
-            Random(f"{event_id}:{round_no}:{c.from_user.id}").shuffle(layout)
-            kind = layout[box_no-1]
-            worth = await conn.fetchval("SELECT cash+stocks+CAST(gold_grams*10 AS BIGINT)+COALESCE((SELECT asset_value FROM player_asset_valuation WHERE player_id=$1),0) FROM players WHERE telegram_id=$1", c.from_user.id)
-            temporary = round(int(worth or 0) * (1.2 if kind=="money" else .8 if kind=="empty" else 1))
-            await conn.execute("INSERT INTO timed_mining_rounds(event_id,round_number,player_id,box_kind,temporary_net_worth) VALUES($1,$2,$3,$4,$5) ON CONFLICT(event_id,round_number,player_id) DO NOTHING", event_id, round_no, c.from_user.id, kind, temporary)
-        desc = {"money":"Money box: +20% temporary battle NW","empty":"Empty box: -20% temporary battle NW","normal":"Normal box: temporary battle NW unchanged"}[kind]
-        if round_no < 4:
-            await c.message.answer(f"{c.from_user.full_name}: {desc}. Temporary NW: {temporary:,}", reply_markup=boxes_kb("tmr", event_id, round_no+1))
-        else:
-            async with get_pool().acquire() as conn:
-                wins = await conn.fetchval("SELECT COUNT(*) FROM timed_mining_rounds WHERE event_id=$1 AND player_id=$2 AND box_kind='money'", event_id, c.from_user.id)
-                if wins == 4:
-                    await conn.execute("UPDATE players SET collection_boost=1.3,collection_boost_until=NOW()+INTERVAL '2 hours' WHERE telegram_id=$1", c.from_user.id)
-                    await c.message.answer(f"🏆 {c.from_user.full_name} won all four money boxes! +30% collection speed for 2 hours.")
-        await c.answer(desc, show_alert=True)
