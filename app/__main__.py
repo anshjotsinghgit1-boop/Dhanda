@@ -112,15 +112,41 @@ async def start(message: Message):
         reply_markup=welcome_keyboard())
 
 
-@dp.message(Command("events"))
-async def events_command(message: Message):
-    await message.answer(
+def events_text() -> str:
+    return (
         "🗓️ <b>EMPIRE EVENT SCHEDULE</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
         + event_countdown_text()
-        + "\n\n⛏️ <b>Mining</b> — lobby stays open for 5 minutes. At least 3 applicants are needed; the strongest 3 qualify from 3–4 applicants, or the strongest 5 qualify from 5+.\n\n"
-        "🏛️ <b>Club battles</b> — unlock at business level 12. Matchmaking pairs players at the same business level; each round has a 15-second pick window."
+        + "\n\n⛏️ <b>Mining</b>\n"
+        "• Lobby opens every 2 hours and stays open for 5 minutes.\n"
+        "• Minimum 3 applicants; 3–4 applicants: top 3 qualify; 5+: top 5 qualify by net worth.\n\n"
+        "🏛️ <b>Club battles</b>\n"
+        "• Queue opens hourly. Requires business level 12.\n"
+        "• Equal-level matchmaking · 15 seconds per round."
     )
+
+
+def events_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Refresh countdowns", callback_data="events_refresh")],
+        [InlineKeyboardButton(text="🏠 Dashboard", callback_data="dashboard"),
+         InlineKeyboardButton(text="📘 Rules", callback_data="game_rules")],
+    ])
+
+
+@dp.message(Command("events"))
+async def events_command(message: Message):
+    await message.answer(events_text(), reply_markup=events_keyboard())
+
+
+@dp.callback_query(F.data == "events_refresh")
+async def events_refresh(callback: CallbackQuery):
+    try:
+        await callback.message.edit_text(events_text(), reply_markup=events_keyboard())
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
+    await callback.answer("⏱️ Countdown refreshed")
 
 
 @dp.callback_query(F.data == "start_company")
@@ -599,33 +625,10 @@ async def business_battle_pick(c: CallbackQuery):
 @dp.message(Command('help'))
 async def help_command(message: Message):
     await message.answer(
-        "📘 <b>EMPIRE CENTURY — COMMAND GUIDE</b>\n━━━━━━━━━━━━━━━━━━\n\n"
-        "/start — start your company or open your dashboard\n"
-        "/empire — view your company status\n"
-        "/collect — collect saved business income\n"
-        "/assetshop — browse assets for sale\n"
-        "/buyasset sports_car — buy an asset using its key\n"
-        "/inventory — view your assets and total net worth\n"
-        "/gold buy 2 — buy 2 grams of gold\n"
-        "/gold sell 1 — sell 1 gram of gold\n"
-        "/industry — view industrial buildings\n"
-        "/buildindustry workshop — buy a workshop\n"
-        "/resumeindustry — resume industry after a season rollover\n"
-        "/stocks — view share prices and your holdings\n"
-        "/stock buy ECOR 10 — buy 10 shares\n"
-        "/stock sell ECOR 2 — sell 2 shares\n"
-        "/club — view your club\n"
-        "/club create Empire Crew | EC — create a club\n"
-        "/club join EC — join a club by tag\n"
-        "/donate 1000 — donate cash to your club\n"
-        "/war TELEGRAM_ID — challenge another player\n"
-        "/hire TELEGRAM_ID — send an employee challenge\n"
-        "/hireaccept CHALLENGE_ID — accept a challenge\n"
-        "/ranking — view the top players\n"
-        "/miningwar — register a group for mining events\n"
-        "/miningstatus — view the group's mining event\n"
-        "/events — view mining and club countdowns\n\n"
-        "For the full explanation, tap “Read the rules” in /start. Seasons last 7 days; temporary cash and business progress reset at settlement, while reputation and eligible permanent assets persist.",
+        "🎮 <b>EMPIRE CENTURY — CONTROL CENTER</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Choose a section below. Use the inline buttons to open your dashboard, markets, clubs, rankings, event countdowns, and rules.\n\n"
+        "💡 Event countdowns can be refreshed anytime from the Events screen. Seasons last 7 days; temporary cash and business progress reset at settlement, while reputation and eligible permanent assets persist.",
         reply_markup=main_menu())
 
 
