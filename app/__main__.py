@@ -226,7 +226,7 @@ async def mining_war_command(message: Message):
         return
     await register_player(message.from_user)
     await register_mining_group(message.chat.id, message.chat.title or 'Mining group')
-    await message.answer('✅ This group is registered for EMPIRE CENTURY mining. Events open automatically every 2 hours with a 5-minute joining window. At least 2 players must join; otherwise this group skips that event.')
+    await message.answer('✅ This group is registered for EMPIRE CENTURY mining. Events open automatically every 2 hours with a 5-minute joining window. At least 3 players must join; otherwise this group skips that event.')
 
 
 @dp.message(Command("miningstatus"))
