@@ -104,10 +104,11 @@ async def start(message: Message):
                              reply_markup=main_menu())
         return
     await message.answer(
-        "🏛 <b>BUSINESS LIFE</b>\n"
-        "<i>Build a company. Grow your wealth. Become a business legend.</i>\n\n"
-        "You are starting from zero experience with 1,000 cash. Start your company to open your dashboard, collect income, upgrade your business, and unlock new ways to invest.\n\n"
-        "New here? Read the rules first, or tap the button below to begin.",
+        "🏛 <b>EMPIRE CENTURY</b>\n"
+        "<i>Build your empire. Grow your wealth. Make every move count.</i>\n\n"
+        "🚀 Start with 1,000 cash, build your company, collect income, invest, and compete with other players.\n\n"
+        + event_countdown_text() + "\n\n"
+        "📘 Read the rules first, or tap below to launch your company.",
         reply_markup=welcome_keyboard())
 
 
@@ -598,7 +599,7 @@ async def business_battle_pick(c: CallbackQuery):
 @dp.message(Command('help'))
 async def help_command(message: Message):
     await message.answer(
-        "📘 <b>BUSINESS LIFE — COMMAND GUIDE</b>\n\n"
+        "📘 <b>EMPIRE CENTURY — COMMAND GUIDE</b>\n━━━━━━━━━━━━━━━━━━\n\n"
         "/start — start your company or open your dashboard\n"
         "/empire — view your company status\n"
         "/collect — collect saved business income\n"
@@ -622,7 +623,8 @@ async def help_command(message: Message):
         "/hireaccept CHALLENGE_ID — accept a challenge\n"
         "/ranking — view the top players\n"
         "/miningwar — register a group for mining events\n"
-        "/miningstatus — view the group's mining event\n\n"
+        "/miningstatus — view the group's mining event\n"
+        "/events — view mining and club countdowns\n\n"
         "For the full explanation, tap “Read the rules” in /start. Seasons last 7 days; temporary cash and business progress reset at settlement, while reputation and eligible permanent assets persist.",
         reply_markup=main_menu())
 
