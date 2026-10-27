@@ -58,15 +58,24 @@ async def timed_scheduler(bot: Bot):
             async with get_pool().acquire() as conn:
                 due = await conn.fetch("SELECT id,chat_id FROM timed_mining_events WHERE status='joining' AND closes_at<=NOW()")
             for event in due:
-                async with get_pool().acquire() as conn:
-                    players = await conn.fetch("SELECT p.telegram_id,p.display_name,p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0) AS worth FROM timed_mining_players t JOIN players p ON p.telegram_id=t.player_id LEFT JOIN player_asset_valuation v ON v.player_id=p.telegram_id WHERE t.event_id=$1 ORDER BY worth DESC", event["id"])
-                    if len(players) < 2:
-                        await conn.execute("UPDATE timed_mining_events SET status='skipped',finished_at=NOW() WHERE id=$1", event["id"])
-                        msg = "Mining skipped: fewer than 2 players joined. Try the next event."
-                    else:
-                        await conn.execute("UPDATE timed_mining_events SET status='fighting' WHERE id=$1", event["id"])
-                        msg = "⚔️ <b>MINING BATTLE</b>\nOpponents:\n" + "\n".join(f"• {p['display_name']} — {int(p['worth']):,} NW" for p in players) + "\n\nFour rounds! Each player chooses one box per round."
-                await bot.send_message(event["chat_id"], msg, reply_markup=boxes_kb("tmr", event["id"], 1) if len(players)>=2 else None)
+                try:
+                    await finalize_mining_event(bot, int(event["id"]), int(event["chat_id"]))
+                except Exception:
+                    log.exception("Could not finalize mining event %s", event["id"])
+            try:
+                await mining_team_tick(bot)
+                from app.mining_team_wars import matchmake_waiting_teams
+                await matchmake_waiting_teams(bot)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("Cross-group mining war tick failed")
+            try:
+                await club_battle_tick(bot)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("Club battle timeout processing failed")
         except asyncio.CancelledError:
             raise
         except Exception:
