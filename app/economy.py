@@ -52,23 +52,62 @@ async def collect_income(telegram_id: int) -> tuple[int, int]:
             await conn.execute('UPDATE players SET cash=cash+$1,last_collected_at=$2 WHERE telegram_id=$3', gross, now, telegram_id)
             return gross, boss_share
 
-async def upgrade_business(telegram_id: int) -> tuple[bool, str]:
+async def auto_upgrade_business(telegram_id: int) -> list[str]:
+    """Automatically level up whenever the treasury reaches the next target.
+
+    Cash spent on an upgrade is deducted from the treasury only; stocks, gold,
+    reputation and owned assets are left untouched, so net worth is not reset.
+    From level 12 onward, two club-battle wins are still required per level.
+    """
+    messages: list[str] = []
     async with get_pool().acquire() as conn:
         async with conn.transaction():
-            p = await conn.fetchrow('SELECT cash, business_level FROM players WHERE telegram_id=$1 FOR UPDATE', telegram_id)
+            p = await conn.fetchrow(
+                'SELECT cash, business_level, club_battle_wins FROM players WHERE telegram_id=$1 FOR UPDATE',
+                telegram_id,
+            )
             if not p:
-                return False, 'Use /start first.'
-            level = p['business_level']
-            if level >= 54:
-                return False, 'Your business is already at the maximum level (54).'
-            # From level 12 onward, require two club-battle wins for each upgrade.
-            if level >= 12:
-                wins = await conn.fetchval('SELECT club_battle_wins FROM players WHERE telegram_id=$1', telegram_id)
-                if int(wins or 0) < 2:
-                    remaining = 2 - int(wins or 0)
-                    return False, f'🏛 Club battle requirement: win {remaining} more match(es) before upgrading from level {level}. Use the club battle queue when it opens.'
-            cost = upgrade_cost(level)
-            if p['cash'] < cost:
-                return False, f'You need {cost:,} cash to upgrade. You have {p["cash"]:,}.'
-            await conn.execute('UPDATE players SET cash=cash-$1, business_level=business_level+1, club_battle_wins=CASE WHEN business_level >= 12 THEN 0 ELSE club_battle_wins END WHERE telegram_id=$2', cost, telegram_id)
-            return True, f'Business upgraded to level {level + 1}! Production is now {production_per_second(level + 1):,} cash/second.'
+                return messages
+            cash = int(p['cash'])
+            level = int(p['business_level'])
+            wins = int(p['club_battle_wins'] or 0)
+            while level < 54:
+                cost = upgrade_cost(level)
+                if cash < cost:
+                    break
+                if level >= 12 and wins < 2:
+                    break
+                cash -= cost
+                level += 1
+                if level > 12:
+                    wins = 0
+                await conn.execute(
+                    '''UPDATE players
+                       SET cash=$1, business_level=$2,
+                           club_battle_wins=CASE WHEN $2 > 12 THEN 0 ELSE club_battle_wins END
+                       WHERE telegram_id=$3''',
+                    cash, level, telegram_id,
+                )
+                messages.append(
+                    f'🏆 Business reached level {level}! Production: '
+                    f'{production_per_second(level):,} cash/sec.'
+                )
+            return messages
+
+
+async def upgrade_business(telegram_id: int) -> tuple[bool, str]:
+    """Compatibility wrapper for older command handlers."""
+    messages = await auto_upgrade_business(telegram_id)
+    if messages:
+        return True, '\\n'.join(messages)
+    p = await get_player(telegram_id)
+    if not p:
+        return False, 'Use /start first.'
+    level = int(p['business_level'])
+    if level >= 54:
+        return False, 'Your business is already at the maximum level (54).'
+    cost = upgrade_cost(level)
+    if level >= 12 and int(p['club_battle_wins'] or 0) < 2:
+        remaining = 2 - int(p['club_battle_wins'] or 0)
+        return False, f'🏛 Club battle requirement: win {remaining} more match(es) before reaching level {level + 1}.'
+    return False, f'Keep building: reach {cost:,} cash to unlock level {level + 1}.'
