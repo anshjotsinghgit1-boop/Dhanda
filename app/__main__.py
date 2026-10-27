@@ -818,29 +818,6 @@ async def hire_accept_command(message: Message):
     await message.answer(('✅ ' if ok else '⚠️ ') + result)
 
 
-@dp.callback_query(F.data == 'help_gold')
-async def help_gold(callback: CallbackQuery):
-    await callback.message.edit_text(
-        '🪙 <b>Gold Exchange</b>\nRate: 1,000 cash per gram.\nBuy: /gold buy 2\nSell: /gold sell 1',
-        reply_markup=main_menu())
-    await callback.answer()
-
-
-@dp.callback_query(F.data == 'help_assets')
-async def help_assets(callback: CallbackQuery):
-    await callback.message.edit_text(
-        '🏬 Browse /assetshop, buy using /buyasset sports_car, and check your collection with /inventory',
-        reply_markup=main_menu())
-    await callback.answer()
-
-
-@dp.callback_query(F.data == 'help_industry')
-async def help_industry(callback: CallbackQuery):
-    await callback.message.edit_text(
-        '🏭 View buildings with /industry and buy one with /buildindustry workshop. Buildings generate reputation over time.',
-        reply_markup=main_menu())
-    await callback.answer()
-
 @dp.callback_query(F.data == 'help_club')
 async def help_club(callback: CallbackQuery):
     await callback.message.edit_text(
