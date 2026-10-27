@@ -23,11 +23,13 @@ from app.employees import send_challenge, accept_challenge
 from app.stocks import quotes, holdings, trade
 from app.mining_wars import create_war, join_team, war_snapshot, start_fight, cancel_war
 from app.timed_events import register_timed_handlers, timed_scheduler, register_mining_group
+from app.club_live import register_club_live_handlers
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 register_timed_handlers(bot, dp)
+register_club_live_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
 @dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"), ~F.text.startswith("/rank"))
