@@ -139,6 +139,8 @@ def register_club_live_handlers(bot: Bot, dp: Dispatcher):
         try: _, match_s, box_s = c.data.split("_"); match_id, box_no = int(match_s), int(box_s)
         except (ValueError, TypeError):
             await c.answer("Invalid box.", show_alert=True); return
+        if box_no not in range(1, 10):
+            await c.answer("Choose one of the nine boxes.", show_alert=True); return
         async with get_pool().acquire() as conn:
             async with conn.transaction():
                 m = await conn.fetchrow("SELECT * FROM club_live_matches WHERE id=$1 FOR UPDATE", match_id)
