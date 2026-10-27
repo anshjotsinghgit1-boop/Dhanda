@@ -525,7 +525,8 @@ async def boxes_command(message: Message):
 
 @dp.callback_query(F.data.startswith("box_s_"))
 async def box_setup_click(c: CallbackQuery):
-    _,_,slot_s,n_s=c.data.split("_")    slot,n=int(slot_s),int(n_s)
+    _, _, slot_s, n_s = c.data.split("_")
+    slot, n = int(slot_s), int(n_s)
     async with get_pool().acquire() as conn:
         row=await conn.fetchrow("SELECT outcomes FROM box_layout_drafts WHERE player_id=$1 AND layout_no=$2",c.from_user.id,slot)
     if not row:
