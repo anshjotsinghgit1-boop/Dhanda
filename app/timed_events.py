@@ -67,9 +67,9 @@ async def announce_countdowns(bot: Bot, now: int):
         # Keep the in-memory dedupe set bounded during long-running Termux sessions.
         if len(_countdown_announced) > 500:
             current_cycles = now // MINING_INTERVAL
-            _countdown_announced.difference_update(
+            _countdown_announced.difference_update({
                 item for item in _countdown_announced if item[1] < current_cycles - 2
-            )
+            })
 
 
 async def timed_scheduler(bot: Bot):
