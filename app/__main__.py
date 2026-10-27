@@ -186,10 +186,11 @@ async def game_rules(callback: CallbackQuery):
         "🏁 <b>10. Seasons & fair play</b>\n"
         "Seasons last 7 days. At settlement, temporary cash and business progress reset while reputation and eligible permanent assets persist. Purchases and upgrades cost in-game cash—read confirmation messages before spending.\n\n"
         "⏰ Use /events to refresh the mining and club countdowns. Use /help for commands. Good luck building your empire! 🚀",
-        reply_markup=welcome_keyboard())
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🏠 Dashboard", callback_data="dashboard"),
+             InlineKeyboardButton(text="⏳ Events", callback_data="events_refresh")],
+        ]))
     await callback.answer()
-
-
 
 
 @dp.message(Command('empire'))
@@ -255,7 +256,8 @@ async def ranking(callback: CallbackQuery):
             p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth
             FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
             ORDER BY worth DESC,p.reputation DESC,p.telegram_id ASC LIMIT 10''')
-    if not rows:        text = 'No players ranked yet. Be the first to build an empire!'
+    if not rows:
+        text = 'No players ranked yet. Be the first to build an empire!'
     else:
         text = '🏆 <b>FOSBU LIST — TOP 10</b>\n\n' + '\n'.join(
             f'{i}. {r["display_name"]} — 💎 {r["worth"]:,} NW | ⭐ {r["reputation"]:,}'
