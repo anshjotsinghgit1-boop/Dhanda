@@ -61,8 +61,14 @@ async def upgrade_business(telegram_id: int) -> tuple[bool, str]:
             level = p['business_level']
             if level >= 54:
                 return False, 'Your business is already at the maximum level (54).'
+            # From level 12 onward, require two club-battle wins for each upgrade.
+            if level >= 12:
+                wins = await conn.fetchval('SELECT club_battle_wins FROM players WHERE telegram_id=$1', telegram_id)
+                if int(wins or 0) < 2:
+                    remaining = 2 - int(wins or 0)
+                    return False, f'🏛 Club battle requirement: win {remaining} more match(es) before upgrading from level {level}. Use the club battle queue when it opens.'
             cost = upgrade_cost(level)
             if p['cash'] < cost:
                 return False, f'You need {cost:,} cash to upgrade. You have {p["cash"]:,}.'
-            await conn.execute('UPDATE players SET cash=cash-$1, business_level=business_level+1 WHERE telegram_id=$2', cost, telegram_id)
+            await conn.execute('UPDATE players SET cash=cash-$1, business_level=business_level+1, club_battle_wins=CASE WHEN business_level >= 12 THEN 0 ELSE club_battle_wins END WHERE telegram_id=$2', cost, telegram_id)
             return True, f'Business upgraded to level {level + 1}! Production is now {production_per_second(level + 1):,} cash/second.'
