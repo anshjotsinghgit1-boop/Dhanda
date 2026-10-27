@@ -16,7 +16,10 @@ async def register_mining_group(chat_id: int, title: str):
         await conn.execute('INSERT INTO mining_groups(chat_id,title) VALUES($1,$2) ON CONFLICT(chat_id) DO UPDATE SET title=EXCLUDED.title', chat_id, (title or 'Mining group')[:120])
 
 def join_kb(event_id):
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⛏ JOIN MINING", callback_data=f"tmj_{event_id}")]])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⛏ JOIN MINING", callback_data=f"tmj_{event_id}", style="success")],
+        [InlineKeyboardButton(text="🏆 TOP MINING GROUPS", callback_data="top_mining_groups", style="primary")]
+    ])
 
 def boxes_kb(prefix, event_id, round_no):
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -87,6 +90,8 @@ async def timed_scheduler(bot: Bot):
                 for group in groups:
                     try:
                         async with get_pool().acquire() as conn:
+                            # A group's previous reward ends as soon as its next mining begins.
+                            await conn.execute("UPDATE mining_group_rewards SET expires_at=NOW() WHERE chat_id=$1", group["chat_id"])
                             event_id = await conn.fetchval("INSERT INTO timed_mining_events(chat_id,opens_at,closes_at) VALUES($1,NOW(),NOW()+INTERVAL '5 minutes') RETURNING id", group["chat_id"])
                         await bot.send_message(group["chat_id"], f"⛏️ <b>MINING LOBBY OPEN</b> · #{event_id}\n━━━━━━━━━━━━━━━━━━\n⏳ <b>5:00 JOIN WINDOW</b>\n👥 Minimum 3 players. Fewer than 3 = event skipped.\n🏆 3–4 applicants: top 3 by net worth qualify.\n💎 5+ applicants: top 5 by net worth qualify.\n📦 Tap JOIN MINING below. Start the bot in DM first.", reply_markup=join_kb(event_id))
                     except Exception:
@@ -134,6 +139,12 @@ def register_timed_handlers(bot: Bot, dp: Dispatcher):
             player = await conn.fetchval("SELECT 1 FROM players WHERE telegram_id=$1", c.from_user.id)
             if not event or not player:
                 await c.answer("Mining is closed, or you need to /start the bot in DM first.", show_alert=True); return
+            await conn.execute(
+                """INSERT INTO mining_group_members(chat_id,player_id,last_seen_at)
+                   SELECT $1,telegram_id,NOW() FROM players WHERE telegram_id=$2
+                   ON CONFLICT(chat_id,player_id) DO UPDATE SET last_seen_at=NOW()""",
+                c.message.chat.id, c.from_user.id,
+            )
             await conn.execute("INSERT INTO timed_mining_players(event_id,player_id) VALUES($1,$2) ON CONFLICT DO NOTHING", event_id, c.from_user.id)
             count = await conn.fetchval("SELECT COUNT(*) FROM timed_mining_players WHERE event_id=$1", event_id)
         await c.answer(f"Joined mining! {count} player(s) joined.")

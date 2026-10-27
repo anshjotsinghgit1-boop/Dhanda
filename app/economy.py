@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from app.db import get_pool
+from app.mining_rewards import collection_bonus_multiplier
 
 OFFLINE_CAP_SECONDS = 8 * 60 * 60
 BASE_CASH_PER_SECOND = 1
@@ -42,7 +43,8 @@ async def collect_income(telegram_id: int) -> tuple[int, int]:
             if player['collection_boost_until'] is None or player['collection_boost_until'] <= now:
                 boost = 1.0
                 await conn.execute('UPDATE players SET collection_boost=1.0,collection_boost_until=NULL WHERE telegram_id=$1', telegram_id)
-            gross = int(base * boost)
+            mining_boost = await collection_bonus_multiplier(conn, telegram_id)
+            gross = int(base * boost * mining_boost)
             boss_share = 0
             employee = await conn.fetchrow('SELECT boss_id FROM employees WHERE employee_id=$1', telegram_id)
             if employee and gross > 0:
