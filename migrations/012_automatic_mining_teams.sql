@@ -46,3 +46,12 @@ CREATE TABLE IF NOT EXISTS mining_team_picks (
 );
 CREATE INDEX IF NOT EXISTS mining_teams_waiting_idx ON mining_teams(status,team_size,created_at);
 CREATE INDEX IF NOT EXISTS mining_team_wars_active_idx ON mining_team_wars(status);
+
+CREATE TABLE IF NOT EXISTS mining_team_layouts (
+  war_id BIGINT NOT NULL,
+  matchup_number SMALLINT NOT NULL,
+  player_id BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
+  layout TEXT NOT NULL,
+  PRIMARY KEY(war_id,matchup_number,player_id),
+  FOREIGN KEY(war_id,matchup_number) REFERENCES mining_team_war_opponents(war_id,matchup_number) ON DELETE CASCADE
+);
