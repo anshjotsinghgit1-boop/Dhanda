@@ -89,6 +89,7 @@ async def timed_scheduler(bot: Bot):
         await asyncio.sleep(5)
 
 def register_timed_handlers(bot: Bot, dp: Dispatcher):
+    register_mining_team_handlers(bot, dp)
     @dp.callback_query(F.data.startswith("tmj_"))
     async def mining_join(c: CallbackQuery):
         event_id = int(c.data.rsplit("_",1)[1])
