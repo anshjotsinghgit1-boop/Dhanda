@@ -1,6 +1,7 @@
 """Automatic cross-group mining team battles."""
 import random
 from app.db import get_pool
+from app.mining_rewards import award_mining_group_win
 from aiogram import F, Bot, Dispatcher
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -101,7 +102,7 @@ async def _start_matchup(conn, war_id: int, matchup: int):
 async def mining_team_tick(bot: Bot):
     """Resolve a matchup after its server-side deadline, then advance or end the war."""
     async with get_pool().acquire() as conn:
-        due = await conn.fetch("""SELECT o.war_id,o.matchup_number,w.main_team_id,main.team_size,main.chat_id AS main_chat,
+        due = await conn.fetch("""SELECT o.war_id,o.matchup_number,w.main_team_id,main.event_id AS main_event_id,main.team_size,main.chat_id AS main_chat,
             o.opponent_team_id,opp.chat_id AS opponent_chat
             FROM mining_team_war_opponents o JOIN mining_team_wars w ON w.id=o.war_id
             JOIN mining_teams main ON main.id=w.main_team_id JOIN mining_teams opp ON opp.id=o.opponent_team_id
@@ -127,7 +128,7 @@ async def mining_team_tick(bot: Bot):
                     if int(item["matchup_number"])==4:
                         await conn.execute("UPDATE mining_team_wars SET status='won',finished_at=NOW(),main_wins=4 WHERE id=$1",item["war_id"])
                         await conn.execute("UPDATE mining_teams SET status='finished' WHERE id IN (SELECT main_team_id FROM mining_team_wars WHERE id=$1 UNION SELECT opponent_team_id FROM mining_team_war_opponents WHERE war_id=$1)",item["war_id"])
-                        result="🏆 <b>MINING WAR WON!</b> Your team won all four matchups."
+                        result="🏆 <b>MINING WAR WON!</b> Your team won all four matchups.\n💰 Your group earns +15% collection for known members; winning team members get +30% until the next mining."
                     else:
                         nxt=int(item["matchup_number"])+1
                         await conn.execute("UPDATE mining_team_wars SET current_matchup=$2,main_wins=main_wins+1 WHERE id=$1",item["war_id"],nxt)
@@ -138,6 +139,14 @@ async def mining_team_tick(bot: Bot):
                     await conn.execute("UPDATE mining_team_wars SET status='lost',finished_at=NOW() WHERE id=$1",item["war_id"])
                     await conn.execute("UPDATE mining_teams SET status='finished' WHERE id IN (SELECT main_team_id FROM mining_team_wars WHERE id=$1 UNION SELECT opponent_team_id FROM mining_team_war_opponents WHERE war_id=$1)",item["war_id"])
                     result=f"❌ <b>MINING WAR LOST</b> — matchup {item['matchup_number']} ended {aw}–{bw}. All four matchups must be won."
+        if won and int(item["matchup_number"]) == 4:
+            try:
+                await award_mining_group_win(
+                    int(item["main_chat"]), int(item["main_event_id"]), int(item["main_team_id"])
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("Could not award mining group bonus for war %s", item["war_id"])
         for chat_id in {int(item["main_chat"]),int(item["opponent_chat"])}:
             try:
                 await bot.send_message(chat_id,result)
