@@ -193,30 +193,29 @@ async def ranking(callback: CallbackQuery):
     await callback.answer()
 
 
-def mining_keyboard(war_id: int, status: str) -> InlineKeyboardMarkup:
-    if status == "recruiting":
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⛏ JOIN MINING", callback_data=f"mine_join_{war_id}")],
-            [InlineKeyboardButton(text="⚒️ START MINING", callback_data=f"mine_start_{war_id}"),
-             InlineKeyboardButton(text="🔄 Refresh", callback_data=f"mine_refresh_{war_id}")],
-            [InlineKeyboardButton(text="✖ Cancel", callback_data=f"mine_cancel_{war_id}")],
-        ])
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data=f"mine_refresh_{war_id}")]])
-
-
-async def mining_text(chat_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
-    war, miners, total_worth = await war_snapshot(chat_id)
-    if not war:
-        return "No active mining session in this group. Start one with /miningwar.", None
-    lines = [f'• {p["display_name"]} — 💎 {p["worth"]:,} NW' for p in miners]
-    status = war["status"]
-    text = (f'⛏ <b>EMPIRE CENTURY — MINING #{war["id"]}</b>\n'
-            f'Status: <b>{status.title()}</b>\n'
-            f'Applicants: <b>{len(miners)}</b>\n\n'
-            + ('\n'.join(lines) if lines else 'No miners have joined yet.')
-            + '\n\nAt start: 3 highest-net-worth miners qualify with 3–4 applicants; '
-              '5 qualify with 5 or more applicants. Minimum 3 applicants.')
-    return text, mining_keyboard(war["id"], status)
+async def mining_text(chat_id: int):
+    async with get_pool().acquire() as conn:
+        event = await conn.fetchrow("SELECT * FROM timed_mining_events WHERE chat_id=$1 ORDER BY id DESC LIMIT 1", chat_id)
+        if not event:
+            return "No mining event has run in this group yet. Run /miningwar once to register this group.", None
+        miners = await conn.fetch("""SELECT p.display_name,p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(v.asset_value,0) AS worth
+            FROM timed_mining_players t JOIN players p ON p.telegram_id=t.player_id
+            LEFT JOIN player_asset_valuation v ON v.player_id=p.telegram_id
+            WHERE t.event_id=$1 ORDER BY worth DESC,p.reputation DESC,p.telegram_id ASC""", event["id"])
+        team = await conn.fetchrow("SELECT id,team_size,status FROM mining_teams WHERE event_id=$1", event["id"])
+    status = str(event["status"]).title()
+    lines = [f"• {p['display_name']} — 💎 {int(p['worth']):,} NW" for p in miners]
+    text = (f"⛏ <b>EMPIRE CENTURY — MINING #{event['id']}</b>\n"
+            f"Status: <b>{status}</b>\nApplicants: <b>{len(miners)}</b>\n\n"
+            + ("\n".join(lines) if lines else "No miners have joined yet."))
+    if team:
+        text += f"\n\nQualified team: <b>{team['team_size']} players</b> · {team['status'].title()}"
+    if event["status"] == "joining":
+        text += "\n\nAt close: top 3 qualify with 3–4 applicants; top 5 qualify with 5 or more. Minimum 3."
+        return text, InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⛏ JOIN MINING", callback_data=f"tmj_{event['id']}")]])
+    if event["status"] == "skipped":
+        text += "\n\nThis event was skipped because fewer than 3 eligible players joined."
+    return text, None
 
 
 @dp.message(Command("miningwar"))
