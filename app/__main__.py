@@ -195,7 +195,7 @@ async def top_mining_groups_text() -> str:
 async def topgroups_command(message: Message):
     await message.answer(await top_mining_groups_text(), reply_markup=InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data="top_mining_groups")],
-                         [InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")]]
+                         ]
     ))
 
 
