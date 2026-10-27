@@ -33,12 +33,52 @@ async def notify_players(bot, message, markup=None):
         except Exception:
             pass
 
+_countdown_announced = set()
+
+
+async def announce_countdowns(bot: Bot, now: int):
+    """Broadcast 5-minute and 1-minute event reminders once per event cycle."""
+    for event_name, interval, emoji, title in (
+        ("mining", MINING_INTERVAL, "⛏️", "Mining lobby"),
+        ("club", CLUB_INTERVAL, "🏛️", "Club battle queue"),
+    ):
+        remaining = interval - (now % interval)
+        threshold = 300 if 295 < remaining <= 300 else 60 if 55 < remaining <= 60 else None
+        if threshold is None:
+            continue
+        cycle = now // interval
+        key = (event_name, cycle, threshold)
+        if key in _countdown_announced:
+            continue
+        _countdown_announced.add(key)
+        msg = f"{emoji} <b>{title} opens in {threshold // 60} minute(s)!</b>\n"
+        if event_name == "mining":
+            msg += "⏳ Join window: 5 minutes · minimum 3 players · top 3 or top 5 qualify by net worth."
+            async with get_pool().acquire() as conn:
+                groups = await conn.fetch("SELECT chat_id FROM mining_groups")
+            for group in groups:
+                try:
+                    await bot.send_message(group["chat_id"], msg)
+                except Exception:
+                    log.exception("Mining countdown announcement failed for group %s", group["chat_id"])
+        else:
+            msg += "⚔️ Unlocks at business level 12 · same-level matchmaking · 15 seconds per round."
+        await notify_players(bot, msg)
+        # Keep the in-memory dedupe set bounded during long-running Termux sessions.
+        if len(_countdown_announced) > 500:
+            current_cycles = now // MINING_INTERVAL
+            _countdown_announced.difference_update(
+                item for item in _countdown_announced if item[1] < current_cycles - 2
+            )
+
+
 async def timed_scheduler(bot: Bot):
     last_mining = int(datetime.now(timezone.utc).timestamp()) // MINING_INTERVAL
     last_club = int(datetime.now(timezone.utc).timestamp()) // CLUB_INTERVAL
     while True:
         try:
             now = int(datetime.now(timezone.utc).timestamp())
+            await announce_countdowns(bot, now)
             ms, cs = now // MINING_INTERVAL, now // CLUB_INTERVAL
             if ms != last_mining:
                 last_mining = ms
@@ -48,13 +88,13 @@ async def timed_scheduler(bot: Bot):
                     try:
                         async with get_pool().acquire() as conn:
                             event_id = await conn.fetchval("INSERT INTO timed_mining_events(chat_id,opens_at,closes_at) VALUES($1,NOW(),NOW()+INTERVAL '5 minutes') RETURNING id", group["chat_id"])
-                        await bot.send_message(group["chat_id"], f"⛏ <b>MINING OPEN</b> #{event_id}\nJoin within 5 minutes. At least 3 players are required. Top 3 qualify from 3–4 applicants; top 5 qualify from 5 or more.", reply_markup=join_kb(event_id))
+                        await bot.send_message(group["chat_id"], f"⛏️ <b>MINING LOBBY OPEN</b> · #{event_id}\n━━━━━━━━━━━━━━━━━━\n⏳ <b>5:00 JOIN WINDOW</b>\n👥 Minimum 3 players. Fewer than 3 = event skipped.\n🏆 3–4 applicants: top 3 by net worth qualify.\n💎 5+ applicants: top 5 by net worth qualify.\n📦 Tap JOIN MINING below. Start the bot in DM first.", reply_markup=join_kb(event_id))
                     except Exception:
                         log.exception("Mining event failed for group %s", group["chat_id"])
-                await notify_players(bot, "⛏ Mining has started in your registered groups. You have 5 minutes to join.")
+                await notify_players(bot, "⛏️ Mining is LIVE in your registered group! You have 5 minutes to join. Open the group event message and tap JOIN MINING.")
             if cs != last_club:
                 last_club = cs
-                await notify_players(bot, "🏛 Club battle is open! Join the queue for a club match.", InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏛 JOIN CLUB BATTLE", callback_data="cbq_join")]]))
+                await notify_players(bot, "🏛️ <b>CLUB BATTLE QUEUE IS OPEN!</b>\n⚔️ Level 12+ · equal-level opponents · 15-second rounds. Tap JOIN CLUB BATTLE to queue.", InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏛 JOIN CLUB BATTLE", callback_data="cbq_join")]]))
             async with get_pool().acquire() as conn:
                 due = await conn.fetch("SELECT id,chat_id FROM timed_mining_events WHERE status='joining' AND closes_at<=NOW()")
             for event in due:
