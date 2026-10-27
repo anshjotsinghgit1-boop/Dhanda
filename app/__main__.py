@@ -194,8 +194,7 @@ async def top_mining_groups_text() -> str:
 @dp.message(Command("topgroups"))
 async def topgroups_command(message: Message):
     await message.answer(await top_mining_groups_text(), reply_markup=InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data="top_mining_groups")],
-                         ]
+        inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data="top_mining_groups")]]
     ))
 
 
@@ -204,8 +203,7 @@ async def topgroups_callback(callback: CallbackQuery):
     text = await top_mining_groups_text()
     try:
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data="top_mining_groups")],
-                             [InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")]]
+            inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data="top_mining_groups")]]
         ))
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc).lower():
