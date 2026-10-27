@@ -162,7 +162,7 @@ async def start_company(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "game_rules")
 async def game_rules(callback: CallbackQuery):
-    await callback.message.answer(
+    await callback.message.edit_text(
         "📘 <b>EMPIRE CENTURY — PLAYER GUIDE</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         "🚀 <b>1. Start your empire</b>\n"
@@ -228,14 +228,22 @@ async def collect(callback: CallbackQuery):
     suffix = f'\n👑 Boss share paid: {shared:,} cash.' if shared else ''
     if industry_rep:
         suffix += f'\n🏭 Industrial reputation settled: +{industry_rep:,}.'
-    await callback.message.answer(f'💰 Collected <b>{amount:,}</b> cash!{suffix}')
+    p = await get_player(callback.from_user.id)
+    await callback.message.edit_text(
+        f'💰 <b>Income collected: {amount:,} cash</b>{suffix}\n\n' +
+        dashboard_text(p, await net_worth(callback.from_user.id)),
+        reply_markup=main_menu())
     await callback.answer('Income collected')
 
 
 @dp.callback_query(F.data == 'upgrade')
 async def upgrade(callback: CallbackQuery):
     ok, message = await upgrade_business(callback.from_user.id)
-    await callback.message.answer(('✅ ' if ok else 'ℹ️ ') + message, reply_markup=main_menu())
+    p = await get_player(callback.from_user.id)
+    await callback.message.edit_text(
+        ('✅ ' if ok else 'ℹ️ ') + message + '\n\n' +
+        dashboard_text(p, await net_worth(callback.from_user.id)),
+        reply_markup=main_menu())
     await callback.answer()
 
 
@@ -247,13 +255,16 @@ async def ranking(callback: CallbackQuery):
             p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth
             FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
             ORDER BY worth DESC,p.reputation DESC,p.telegram_id ASC LIMIT 10''')
-    if not rows:
-        text = 'No players ranked yet. Be the first to build an empire!'
+    if not rows:        text = 'No players ranked yet. Be the first to build an empire!'
     else:
         text = '🏆 <b>FOSBU LIST — TOP 10</b>\n\n' + '\n'.join(
             f'{i}. {r["display_name"]} — 💎 {r["worth"]:,} NW | ⭐ {r["reputation"]:,}'
             for i, r in enumerate(rows, 1))
-    await callback.message.answer(text, reply_markup=main_menu())
+    try:
+        await callback.message.edit_text(text, reply_markup=main_menu())
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
     await callback.answer()
 
 
@@ -497,8 +508,7 @@ async def boxes_command(message: Message):
 
 @dp.callback_query(F.data.startswith("box_s_"))
 async def box_setup_click(c: CallbackQuery):
-    _,_,slot_s,n_s=c.data.split("_")
-    slot,n=int(slot_s),int(n_s)
+    _,_,slot_s,n_s=c.data.split("_")    slot,n=int(slot_s),int(n_s)
     async with get_pool().acquire() as conn:
         row=await conn.fetchrow("SELECT outcomes FROM box_layout_drafts WHERE player_id=$1 AND layout_no=$2",c.from_user.id,slot)
     if not row:
@@ -732,25 +742,32 @@ async def hire_accept_command(message: Message):
 
 @dp.callback_query(F.data == 'help_gold')
 async def help_gold(callback: CallbackQuery):
-    await callback.message.answer('🪙 <b>Gold Exchange</b>\nRate: 1,000 cash per gram.\nBuy: /gold buy 2\nSell: /gold sell 1')
+    await callback.message.edit_text(
+        '🪙 <b>Gold Exchange</b>\nRate: 1,000 cash per gram.\nBuy: /gold buy 2\nSell: /gold sell 1',
+        reply_markup=main_menu())
     await callback.answer()
 
 
 @dp.callback_query(F.data == 'help_assets')
 async def help_assets(callback: CallbackQuery):
-    await callback.message.answer('🏬 Browse /assetshop, buy using /buyasset sports_car, and check your collection with /inventory.')
+    await callback.message.edit_text(
+        '🏬 Browse /assetshop, buy using /buyasset sports_car, and check your collection with /inventory',
+        reply_markup=main_menu())
     await callback.answer()
 
 
 @dp.callback_query(F.data == 'help_industry')
 async def help_industry(callback: CallbackQuery):
-    await callback.message.answer('🏭 View buildings with /industry and buy one with /buildindustry workshop. Buildings generate reputation over time.')
+    await callback.message.edit_text(
+        '🏭 View buildings with /industry and buy one with /buildindustry workshop. Buildings generate reputation over time.',
+        reply_markup=main_menu())
     await callback.answer()
-
 
 @dp.callback_query(F.data == 'help_club')
 async def help_club(callback: CallbackQuery):
-    await callback.message.answer('🏰 /club — view your club\n/club create Empire Crew | EC\n/club join EC\n/donate 1000')
+    await callback.message.edit_text(
+        '🏰 /club — view your club\n/club create Empire Crew | EC\n/club join EC\n/donate 1000',
+        reply_markup=main_menu())
     await callback.answer()
 
 
