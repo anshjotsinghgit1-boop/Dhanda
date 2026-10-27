@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS club_battle_series (
   CHECK(player_id <> opponent_id)
 );
 CREATE TABLE IF NOT EXISTS club_live_matches (
-  id INTEGER PRIMARY KEY,
+  id BIGSERIAL PRIMARY KEY,
   player_a BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
   player_b BIGINT NOT NULL REFERENCES players(telegram_id) ON DELETE CASCADE,
   round_number SMALLINT NOT NULL DEFAULT 1 CHECK(round_number BETWEEN 1 AND 3),
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS club_live_rounds (
   PRIMARY KEY(match_id,round_number)
 );
 CREATE TABLE IF NOT EXISTS mining_war_matchups (
-  id INTEGER PRIMARY KEY,
+  id BIGSERIAL PRIMARY KEY,
   war_id BIGINT NOT NULL REFERENCES group_mining_wars(id) ON DELETE CASCADE,
   matchup_number SMALLINT NOT NULL CHECK(matchup_number BETWEEN 1 AND 4),
   team_a_wins SMALLINT NOT NULL DEFAULT 0,
