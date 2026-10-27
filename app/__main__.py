@@ -144,10 +144,10 @@ def events_text() -> str:
 
 def events_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⛏️ Mining Rules", callback_data="rule_mining"),
-         InlineKeyboardButton(text="🏰 Club Rules", callback_data="rule_club")],
-        [InlineKeyboardButton(text="🔄 Refresh Countdown", callback_data="events_refresh")],
-        [InlineKeyboardButton(text="🏢 My Empire", callback_data="my_empire"),
+        [InlineKeyboardButton(text="⛏️ Mining Rules", callback_data="rule_mining", style="primary"),
+         InlineKeyboardButton(text="🏰 Club Rules", callback_data="rule_club", style="primary")],
+        [InlineKeyboardButton(text="🔄 Refresh Countdown", callback_data="events_refresh", style="primary")],
+        [InlineKeyboardButton(text="🏢 My Empire", callback_data="my_empire", style="primary"),
          InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
     ])
 
@@ -184,10 +184,10 @@ async def game_rules(callback: CallbackQuery):
         "━━━━━━━━━━━━━━━━━━\n"
         "Choose a section to see only the rules relevant to that activity.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🏢 Business", callback_data="rule_business"),
-             InlineKeyboardButton(text="💰 Economy", callback_data="rule_economy")],
-            [InlineKeyboardButton(text="🏰 Club Battles", callback_data="rule_club")],
-            [InlineKeyboardButton(text="⛏️ Mining", callback_data="rule_mining")],
+            [InlineKeyboardButton(text="🏢 Business", callback_data="rule_business", style="primary"),
+             InlineKeyboardButton(text="💰 Economy", callback_data="rule_economy", style="success")],
+            [InlineKeyboardButton(text="🏰 Club Battles", callback_data="rule_club", style="primary")],
+            [InlineKeyboardButton(text="⛏️ Mining", callback_data="rule_mining", style="success")],
             [InlineKeyboardButton(text="🔙 Back", callback_data="dashboard"),
              InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
         ]))
@@ -231,7 +231,7 @@ async def contextual_rules(callback: CallbackQuery):
     await callback.message.edit_text(
         sections[callback.data],
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📘 All Rules", callback_data="game_rules")],
+            [InlineKeyboardButton(text="📘 All Rules", callback_data="game_rules", style="primary")],
             [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
              InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
         ]))
@@ -253,14 +253,14 @@ async def more_menu(callback: CallbackQuery):
         "━━━━━━━━━━━━━━━━━━\n"
         "Choose a department. Each section opens its own focused screen.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬆️ Upgrade Business", callback_data="upgrade"),
-             InlineKeyboardButton(text="🏆 FOSBU List", callback_data="ranking")],
-            [InlineKeyboardButton(text="🪙 Gold & Markets", callback_data="help_gold"),
-             InlineKeyboardButton(text="🏭 Industry", callback_data="help_industry")],
-            [InlineKeyboardButton(text="🏰 Club", callback_data="help_club"),
-             InlineKeyboardButton(text="📘 Rules", callback_data="game_rules")],
-            [InlineKeyboardButton(text="⛏️ Mining Rules", callback_data="rule_mining")],
-            [InlineKeyboardButton(text="🔙 Back to My Empire", callback_data="my_empire"),
+            [InlineKeyboardButton(text="⬆️ Upgrade Business", callback_data="upgrade", style="success"),
+             InlineKeyboardButton(text="🏆 FOSBU List", callback_data="ranking", style="primary")],
+            [InlineKeyboardButton(text="🪙 Gold & Markets", callback_data="help_gold", style="success"),
+             InlineKeyboardButton(text="🏭 Industry", callback_data="help_industry", style="primary")],
+            [InlineKeyboardButton(text="🏰 Club", callback_data="help_club", style="primary"),
+             InlineKeyboardButton(text="📘 Rules", callback_data="game_rules", style="primary")],
+            [InlineKeyboardButton(text="⛏️ Mining Rules", callback_data="rule_mining", style="primary")],
+            [InlineKeyboardButton(text="🔙 Back to My Empire", callback_data="my_empire", style="primary"),
              InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
         ]))
     await callback.answer()
@@ -828,7 +828,7 @@ async def help_club(callback: CallbackQuery):
         'Donate: /donate 1000\n\n'
         'Club battle queue opens hourly; battle access unlocks at business level 12.',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🏰 Club Rules", callback_data="rule_club")],
+            [InlineKeyboardButton(text="🏰 Club Rules", callback_data="rule_club", style="primary")],
             [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
              InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
         ]))
