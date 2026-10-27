@@ -99,7 +99,7 @@ async def upgrade_business(telegram_id: int) -> tuple[bool, str]:
     """Compatibility wrapper for older command handlers."""
     messages = await auto_upgrade_business(telegram_id)
     if messages:
-        return True, '\\n'.join(messages)
+        return True, '\n'.join(messages)
     p = await get_player(telegram_id)
     if not p:
         return False, 'Use /start first.'
