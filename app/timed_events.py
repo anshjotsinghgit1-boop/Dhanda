@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from aiogram import F, Bot, Dispatcher
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from app.db import get_pool
+from app.club_live import club_battle_tick
 
 log = logging.getLogger(__name__)
 MINING_INTERVAL = 7200
@@ -69,6 +70,12 @@ async def timed_scheduler(bot: Bot):
             raise
         except Exception:
             log.exception("Timed event scheduler error")
+        try:
+            await club_battle_tick(bot)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Club battle timeout processing failed")
         await asyncio.sleep(5)
 
 def register_timed_handlers(bot: Bot, dp: Dispatcher):
