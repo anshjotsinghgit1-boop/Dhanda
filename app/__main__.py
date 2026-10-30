@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from aiogram import Bot, Dispatcher, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.client.default import DefaultBotProperties
 
 from app.config import BOT_TOKEN
@@ -27,6 +27,7 @@ from app.mining_wars import create_war, join_team, war_snapshot, start_fight, ca
 from app.timed_events import register_timed_handlers, timed_scheduler, register_mining_group
 from app.mining_rewards import MiningGroupMemberTracker, top_mining_groups
 from app.club_competitions import register_competition_handlers
+from app.competition_images import render_forbes_leaderboard
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
@@ -390,22 +391,20 @@ async def upgrade(callback: CallbackQuery):
 @dp.callback_query(F.data == 'ranking')
 async def ranking(callback: CallbackQuery):
     async with get_pool().acquire() as conn:
-        rows = await conn.fetch('''SELECT p.display_name,p.is_npc,p.cash,p.business_level,
-            p.stocks,p.gold_grams,
-            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth
+        rows = await conn.fetch('''SELECT p.telegram_id,p.display_name,p.is_npc,p.business_level,
+            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth,
+            COUNT(*) OVER () AS total_players
             FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
             ORDER BY worth DESC,p.telegram_id ASC LIMIT 10''')
     if not rows:
-        text = 'No players ranked yet. Be the first to build an empire!'
+        await callback.message.answer("No players ranked yet. Be the first to build an empire!")
     else:
-        text = '🏆 <b>FORBES LIST — TOP 10</b>\n\n' + '\n'.join(
-            f'{i}. {"🤖 NPC · " if r["is_npc"] else ""}{r["display_name"]} — 💎 {r["worth"]:,} NW'
-            for i, r in enumerate(rows, 1))
-    try:
-        await callback.message.edit_text(text, reply_markup=main_menu())
-    except TelegramBadRequest as exc:
-        if "message is not modified" not in str(exc).lower():
-            raise
+        image = await render_forbes_leaderboard(bot, rows, int(rows[0]["total_players"]))
+        await callback.message.answer_photo(
+            BufferedInputFile(image, filename="forbes_list.png"),
+            caption="🏆 <b>FORBES LIST</b> · Ranked by net worth only",
+            reply_markup=main_menu(),
+        )
     await callback.answer()
 
 
@@ -813,11 +812,19 @@ async def rank_command(message: Message):
 @dp.message(Command('ranking'))
 async def ranking_command(message: Message):
     async with get_pool().acquire() as conn:
-        rows = await conn.fetch('''SELECT p.display_name,p.is_npc,p.cash,p.business_level,p.stocks,p.gold_grams,
-            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth
-            FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id ORDER BY worth DESC,p.telegram_id ASC LIMIT 10''')
-    text = '🏆 <b>FORBES LIST — TOP 10</b>\n\n' + ('\n'.join(f'{i}. {"🤖 NPC · " if r["is_npc"] else ""}{r["display_name"]} — 💎 {r["worth"]:,} NW' for i, r in enumerate(rows, 1)) if rows else 'No players yet.')
-    await message.answer(text)
+        rows = await conn.fetch('''SELECT p.telegram_id,p.display_name,p.is_npc,p.business_level,
+            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth,
+            COUNT(*) OVER () AS total_players
+            FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
+            ORDER BY worth DESC,p.telegram_id ASC LIMIT 10''')
+    if not rows:
+        await message.answer("No players ranked yet.")
+        return
+    image = await render_forbes_leaderboard(bot, rows, int(rows[0]["total_players"]))
+    await message.answer_photo(
+        BufferedInputFile(image, filename="forbes_list.png"),
+        caption="🏆 <b>FORBES LIST</b> · Ranked by net worth only",
+    )
 
 
 @dp.message(Command('stocks'))
