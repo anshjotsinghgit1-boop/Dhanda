@@ -33,8 +33,16 @@ class DatabaseStartupTests(unittest.TestCase):
                     level_count = await conn.fetchval(
                         "SELECT COUNT(*) FROM players WHERE is_npc=TRUE AND business_level=12"
                     )
+                    applied_before = await conn.fetchval("SELECT COUNT(*) FROM schema_migrations")
                 self.assertEqual(count, 50)
                 self.assertEqual(level_count, 50)
+                await close()
+                await connect()
+                async with get_pool().acquire() as conn:
+                    applied_after = await conn.fetchval("SELECT COUNT(*) FROM schema_migrations")
+                    count_after_restart = await conn.fetchval("SELECT COUNT(*) FROM players WHERE is_npc=TRUE")
+                self.assertEqual(applied_after, applied_before)
+                self.assertEqual(count_after_restart, 50)
             finally:
                 await close()
                 Path(TEST_DB).unlink(missing_ok=True)
