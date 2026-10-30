@@ -255,7 +255,7 @@ async def _send_roster_updates(bot: Bot):
                     await bot.send_photo(
                         person["telegram_id"],
                         BufferedInputFile(image, filename=f"level_{level}_roster_{update_no}.png"),
-                        caption=f"🏛 <b>LEVEL {level} ROSTER UPDATE {update_no}/4</b>\\n👥 {len(participants)} participants registered",
+                        caption=f"🏛 <b>LEVEL {level} ROSTER UPDATE {update_no}/4</b>\n👥 {len(participants)} participants registered",
                     )
                 except Exception:
                     log.debug("Roster update delivery failed for %s", person["telegram_id"])
