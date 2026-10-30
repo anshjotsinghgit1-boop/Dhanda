@@ -10,6 +10,7 @@ MIGRATIONS = [
     ROOT / "migrations/014_competition_roster_updates.sql",
     ROOT / "migrations/015_allow_reused_npc_opponents.sql",
     ROOT / "migrations/016_club_hourly_schedule.sql",
+    ROOT / "migrations/017_club_live_match_screen.sql",
 ]
 
 
@@ -59,6 +60,11 @@ class CompetitionMigrationTests(unittest.TestCase):
             "SELECT COUNT(*) FROM club_competitions WHERE business_level=12"
         ).fetchone()[0]
         self.assertEqual(count, 3)
+
+    def test_live_match_screen_columns_exist(self):
+        columns = {row[1] for row in self.db.execute("PRAGMA table_info(club_competition_matches)")}
+        self.assertIn("message_id", columns)
+        self.assertIn("countdown_mark", columns)
 
     def test_each_human_can_get_two_distinct_npc_opponents(self):
         for human_id, opponents in ((101, (-1, -2)), (102, (-1, -2))):
