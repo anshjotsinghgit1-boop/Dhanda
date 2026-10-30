@@ -9,6 +9,7 @@ MIGRATIONS = [
     ROOT / "migrations/013_competition_match_round_state.sql",
     ROOT / "migrations/014_competition_roster_updates.sql",
     ROOT / "migrations/015_allow_reused_npc_opponents.sql",
+    ROOT / "migrations/016_club_hourly_schedule.sql",
 ]
 
 
@@ -44,6 +45,20 @@ class CompetitionMigrationTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
+
+    def test_each_hourly_slot_can_have_a_new_competition(self):
+        self.db.execute(
+            """INSERT INTO club_competitions(business_level,status,opens_at,closes_at,schedule_key)
+               VALUES(12,'joining',CURRENT_TIMESTAMP,datetime('now','+5 minutes'),'2026-10-30T10')"""
+        )
+        self.db.execute(
+            """INSERT INTO club_competitions(business_level,status,opens_at,closes_at,schedule_key)
+               VALUES(12,'joining',CURRENT_TIMESTAMP,datetime('now','+5 minutes'),'2026-10-30T11')"""
+        )
+        count = self.db.execute(
+            "SELECT COUNT(*) FROM club_competitions WHERE business_level=12"
+        ).fetchone()[0]
+        self.assertEqual(count, 3)
 
     def test_each_human_can_get_two_distinct_npc_opponents(self):
         for human_id, opponents in ((101, (-1, -2)), (102, (-1, -2))):
