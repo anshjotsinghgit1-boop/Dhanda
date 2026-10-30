@@ -49,7 +49,7 @@ The local database is created automatically at `data/dhanda.sqlite3`. The `data/
 
 ## Commands
 
-- `/start`, `/empire`, `/collect`, `/ranking`
+- `/start`, `/empire`, `/collect`, `/ranking`, `/season`
 - `/assetshop`, `/buyasset sports_car`, `/inventory`
 - `/gold buy 2`, `/gold sell 1`
 - `/stocks`, `/stock buy ECOR 10`, `/stock sell ECOR 2`
