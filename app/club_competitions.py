@@ -136,7 +136,7 @@ async def _refresh_active_match_screens(bot: Bot):
         remaining = max(0, (deadline - now).total_seconds())
         seconds = math.ceil(remaining)
         if remaining > ROUND_SECONDS:
-            checkpoint = 100 + max(1, math.ceil(remaining - ROUND_SECONDS))
+            checkpoint = 100 + min(3, max(1, math.ceil(remaining - ROUND_SECONDS)))
             phase = "starting"
             label = f"⏳ MATCH STARTS IN {checkpoint - 100}..."
             markup = None
@@ -465,6 +465,9 @@ def register_competition_handlers(bot: Bot, dp: Dispatcher):
 
     @dp.callback_query(F.data.startswith("ccp_"))
     async def competition_pick(c: CallbackQuery):
+        if c.data == "ccp_done":
+            await c.answer("That box is already open.")
+            return
         try:
             _, match_s, box_s = c.data.split("_")
             match_id, box_no = int(match_s), int(box_s)
