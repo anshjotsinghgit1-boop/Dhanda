@@ -54,7 +54,7 @@ async def render_roster(bot, level, participants):
         mask = Image.new("L", (76, 76), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, 75, 75), fill=255)
         image.paste(avatar, (x + 12, y + 9), mask)
-        name = str(player["display_name"] or "Player")
+        name = str(player["display_name"] or "Player").replace("🤖 NPC · ", "")
         draw.text((x + 104, y + 17), name[:28], font=_font(22), fill=(245, 248, 255))
         tag = "NPC" if player["is_npc"] else "PLAYER"
         draw.text((x + 104, y + 53), f"{tag}  •  BUSINESS LEVEL {level}", font=_font(15), fill=(143, 174, 207))
@@ -100,14 +100,14 @@ async def render_forbes_leaderboard(bot, rows, total_players, title='FORBES LIST
     draw.text((72, 150), f"{subtitle}  •  {total_players} PLAYERS", font=_font(17), fill=(111, 224, 190))
     podium = rows[:3]
     positions = [(397, 205, 305, 465), (65, 235, 305, 435), (729, 235, 305, 435)]
-    medals = ["🥇", "🥈", "🥉"]
+    medals = [("1ST", (255, 211, 105)), ("2ND", (207, 220, 235)), ("3RD", (202, 145, 108))]
     for idx, (player, (x, y, w, h)) in enumerate(zip(podium, positions)):
         draw.rounded_rectangle((x, y, x+w, y+h), radius=24, fill=(29, 43, 67), outline=(83, 112, 151), width=2)
         avatar = await _avatar(bot, player)
         mask = Image.new("L", (94, 94), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, 93, 93), fill=255)
         image.paste(avatar.resize((94,94)), (x+(w-94)//2, y+24), mask)
-        draw.text((x+w//2, y+133), medals[idx], anchor="mm", font=_font(29), fill=(255, 218, 130))
+        draw.text((x+w//2, y+133), medals[idx][0], anchor="mm", font=_font(25), fill=medals[idx][1])
         name = str(player["display_name"] or "Player")
         draw.text((x+w//2, y+177), name[:20], anchor="mm", font=_font(20), fill=(245,248,255))
         if player["is_npc"]:
