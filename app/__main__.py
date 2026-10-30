@@ -14,7 +14,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
-from app.economy import register_player, get_player, collect_income, auto_upgrade_business, upgrade_business, production_per_second, upgrade_cost
+from app.economy import register_player, get_player, collect_income, auto_upgrade_business, upgrade_business, production_per_second, upgrade_cost, requires_club_competition
 from app.npcs import seed_npcs
 from app.keyboards import main_menu, my_empire_keyboard, back_home_keyboard
 from app.seasons import season_scheduler
@@ -89,9 +89,9 @@ def dashboard_text(p, worth: int | None = None) -> str:
         filled = min(10, int(progress / 10))
         bar = "🟩" * filled + "▫️" * (10 - filled)
         shortfall = max(0, cost - cash)
-        wins = int(p["club_battle_wins"] or 0) if "club_battle_wins" in p.keys() else 0
-        battle_locked = level >= 12 and wins < 2
-        target_status = f"🏛 Win {2 - wins} more club battle(s) to unlock this level." if battle_locked else (
+        completed_level = int(p["club_completed_level"] or 0) if "club_completed_level" in p.keys() else 0
+        battle_locked = requires_club_competition(level) and completed_level != level
+        target_status = f"🏛 Win both matches in the Level {level} competition to unlock this upgrade." if battle_locked else (
             "✨ Target reached — level-up is automatic!" if shortfall == 0 else f"💰 <b>{shortfall:,}</b> cash to go"
         )
         milestone = (
