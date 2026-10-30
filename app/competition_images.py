@@ -87,3 +87,41 @@ async def render_competition_result(bot, level, player, matches, passed):
     output = BytesIO()
     image.save(output, format="PNG", optimize=True)
     return output.getvalue()
+async def render_forbes_leaderboard(bot, rows, total_players):
+    width, height = 1100, 1120
+    image = Image.new("RGB", (width, height), (12, 18, 32))
+    draw = ImageDraw.Draw(image)
+    for y in range(height):
+        mix = y / height
+        draw.line((0, y, width, y), fill=(int(14+10*mix), int(23+13*mix), int(42+20*mix)))
+    draw.rounded_rectangle((34, 28, width-34, 180), radius=28, fill=(24, 38, 63), outline=(75, 115, 160), width=2)
+    draw.text((70, 55), "EMPIRE CENTURY  /  GLOBAL RANKINGS", font=_font(23), fill=(137, 190, 255))
+    draw.text((70, 95), "🏆 FORBES LIST", font=_font(46), fill=(248, 250, 255))
+    draw.text((72, 150), f"RANKED BY NET WORTH  •  {total_players} PLAYERS", font=_font(19), fill=(111, 224, 190))
+    podium = rows[:3]
+    positions = [(65, 235, 305, 435), (397, 205, 305, 465), (729, 235, 305, 435)]
+    medals = ["🥇", "🥈", "🥉"]
+    for idx, (player, (x, y, w, h)) in enumerate(zip(podium, positions)):
+        draw.rounded_rectangle((x, y, x+w, y+h), radius=24, fill=(29, 43, 67), outline=(83, 112, 151), width=2)
+        avatar = await _avatar(bot, player)
+        mask = Image.new("L", (94, 94), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, 93, 93), fill=255)
+        image.paste(avatar.resize((94,94)), (x+(w-94)//2, y+24), mask)
+        draw.text((x+w//2, y+133), medals[idx], anchor="mm", font=_font(29), fill=(255, 218, 130))
+        name = str(player["display_name"] or "Player")
+        draw.text((x+w//2, y+177), name[:20], anchor="mm", font=_font(20), fill=(245,248,255))
+        if player["is_npc"]:
+            draw.text((x+w//2, y+205), "NPC", anchor="mm", font=_font(15), fill=(137,190,255))
+        draw.text((x+w//2, y+h-35), f"{int(player['worth']):,} NW", anchor="mm", font=_font(20), fill=(111,224,190))
+    draw.rounded_rectangle((38, 730, width-38, 1080), radius=24, fill=(24, 38, 60), outline=(55,76,108), width=1)
+    draw.text((72, 755), "TOP 10  /  NET WORTH", font=_font(22), fill=(137,190,255))
+    for idx, player in enumerate(rows[3:10], start=4):
+        y = 800 + (idx-4)*39
+        label = f"{idx:02d}  {str(player['display_name'] or 'Player')[:26]}"
+        if player["is_npc"]:
+            label = f"{idx:02d}  NPC · {str(player['display_name'] or 'NPC')[:22]}"
+        draw.text((75, y), label, font=_font(18), fill=(239,244,252))
+        draw.text((width-75, y), f"{int(player['worth']):,}", anchor="ra", font=_font(18), fill=(111,224,190))
+    output = BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    return output.getvalue()
