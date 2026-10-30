@@ -77,7 +77,7 @@ async def announce_countdowns(bot: Bot, now: int):
 
 async def announce_club_rosters(bot: Bot, now_local: datetime):
     """Send one clear roster image exactly one minute before each scheduled club opening."""
-    if now_local.minute != 59 or now_local.second > 5:
+    if now_local.minute != 59:
         return
     opening_hour = (now_local.hour + 1) % 24
     if opening_hour not in CLUB_OPEN_HOURS:
@@ -146,7 +146,7 @@ async def timed_scheduler(bot: Bot):
                     except Exception:
                         log.exception("Mining event failed for group %s", group["chat_id"])
                 await notify_players(bot, "⛏️ Mining is LIVE in your registered group! You have 5 minutes to join. Open the group event message and tap JOIN MINING.")
-            if now_local.minute == 0 and now_local.second < 5 and now_local.hour in CLUB_OPEN_HOURS:
+            if now_local.minute == 0 and now_local.hour in CLUB_OPEN_HOURS:
                 slot = (now_local.date().isoformat(), now_local.hour)
                 if slot not in _club_opened_slots:
                     _club_opened_slots.add(slot)
