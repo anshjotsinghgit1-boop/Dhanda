@@ -59,7 +59,7 @@ async def announce_countdowns(bot: Bot, now: int):
     if key in _countdown_announced:
         return
     _countdown_announced.add(key)
-    msg = f"⛏️ <b>Mining lobby opens in {threshold // 60} minute(s)!</b>\\n"
+    msg = f"⛏️ <b>Mining lobby opens in {threshold // 60} minute(s)!</b>\n"
     msg += "⏳ Join window: 5 minutes · minimum 3 players · top 3 or top 5 qualify by net worth."
     async with get_pool().acquire() as conn:
         groups = await conn.fetch("SELECT chat_id FROM mining_groups")
@@ -103,8 +103,8 @@ async def announce_club_rosters(bot: Bot, now_local: datetime):
         try:
             photo = await render_roster(bot, level, participants)
             caption = (
-                f"🏛 <b>LEVEL {level} CLUB ROSTER</b>\\n"
-                f"⏳ Competition opens in 1 minute · {opening_hour:02d}:00 IST\\n"
+                f"🏛 <b>LEVEL {level} CLUB ROSTER</b>\n"
+                f"⏳ Competition opens in 1 minute · {opening_hour:02d}:00 IST\n"
                 f"👥 {len(participants)} eligible participants"
             )
             for player in humans:
