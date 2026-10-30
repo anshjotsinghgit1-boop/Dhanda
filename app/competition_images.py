@@ -108,7 +108,7 @@ async def render_forbes_leaderboard(bot, rows, total_players, title='FORBES LIST
         ImageDraw.Draw(mask).ellipse((0, 0, 93, 93), fill=255)
         image.paste(avatar.resize((94,94)), (x+(w-94)//2, y+24), mask)
         draw.text((x+w//2, y+133), medals[idx][0], anchor="mm", font=_font(25), fill=medals[idx][1])
-        name = str(player["display_name"] or "Player")
+        name = str(player["display_name"] or "Player").replace("🤖 NPC · ", "")
         draw.text((x+w//2, y+177), name[:20], anchor="mm", font=_font(20), fill=(245,248,255))
         if player["is_npc"]:
             draw.text((x+w//2, y+205), "NPC", anchor="mm", font=_font(15), fill=(137,190,255))
