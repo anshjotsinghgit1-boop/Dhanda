@@ -88,7 +88,7 @@ async def auto_upgrade_business(telegram_id: int) -> list[str]:
                 level += 1
                 await conn.execute(
                     '''UPDATE players
-                       SET cash=$1, business_level=$2,
+                       SET cash=$1, business_level=$2
                        WHERE telegram_id=$3''',
                     cash, level, telegram_id,
                 )
