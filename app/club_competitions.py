@@ -243,7 +243,7 @@ async def _send_roster_updates(bot: Bot):
                    JOIN players p ON p.telegram_id=cp.player_id
                    WHERE cp.competition_id=$1 ORDER BY p.is_npc,p.display_name""", cid
             )
-        if not participants:
+        if not participants or not any(not person["is_npc"] for person in participants):
             continue
         try:
             image = await render_roster(bot, level, participants)
@@ -291,7 +291,7 @@ async def competition_lobby_tick(bot: Bot):
             npc_ids = [int(n["telegram_id"]) for n in npcs]
             for idx, human in enumerate(humans):
                 pid = int(human["player_id"])
-                chosen = [npc_ids[(idx*2) % len(npc_ids)], npc_ids[(idx*2+1) % len(npc_ids)]]
+                chosen = [npc_ids[idx % len(npc_ids)], npc_ids[(idx + len(npc_ids)//2) % len(npc_ids)]]
                 for match_no, opponent in enumerate(chosen, start=1):
                     la = json.dumps(_layout(f"{cid}:{pid}:{match_no}:human"))
                     lb = json.dumps(_layout(f"{cid}:{pid}:{match_no}:npc"))
