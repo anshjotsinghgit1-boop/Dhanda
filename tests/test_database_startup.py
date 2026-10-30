@@ -10,9 +10,16 @@ os.environ["DATABASE_PATH"] = TEST_DB
 
 from app.db import connect, close, get_pool
 from app.npcs import seed_npcs
+from app.economy import requires_club_competition
 
 
 class DatabaseStartupTests(unittest.TestCase):
+    def test_alternating_competition_gate(self):
+        self.assertEqual([level for level in range(12, 54) if requires_club_competition(level)], list(range(12, 54, 2)))
+        self.assertFalse(requires_club_competition(13))
+        self.assertFalse(requires_club_competition(53))
+        self.assertFalse(requires_club_competition(54))
+
     def test_full_sqlite_startup_and_npc_seed(self):
         async def run():
             await connect()
