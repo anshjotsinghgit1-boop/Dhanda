@@ -5,7 +5,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = [
-    ROOT / "migrations/012_automatic_mining_teams.sql",
     ROOT / "migrations/012_club_competition_npc_foundation.sql",
     ROOT / "migrations/013_competition_match_round_state.sql",
     ROOT / "migrations/014_competition_roster_updates.sql",
@@ -26,6 +25,14 @@ class CompetitionMigrationTests(unittest.TestCase):
                 business_level INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE timed_mining_events (id INTEGER PRIMARY KEY);
+            CREATE TABLE mining_team_war_opponents (
+                war_id INTEGER NOT NULL,
+                matchup_number INTEGER NOT NULL,
+                opponent_team_id INTEGER,
+                status TEXT NOT NULL DEFAULT 'pending',
+                deadline_at TIMESTAMP,
+                PRIMARY KEY(war_id, matchup_number)
+            );
         """)
         for migration in MIGRATIONS:
             self.db.executescript(migration.read_text(encoding="utf-8"))
