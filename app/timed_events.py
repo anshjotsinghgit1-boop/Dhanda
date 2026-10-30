@@ -118,7 +118,7 @@ async def timed_scheduler(bot: Bot):
                 log.exception("Cross-group mining war tick failed")
             try:
                 await club_battle_tick(bot)
-                await competition_lobby_tick()
+                await competition_lobby_tick(bot)
             except asyncio.CancelledError:
                 raise
             except Exception:
