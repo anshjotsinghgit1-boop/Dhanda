@@ -150,7 +150,7 @@ async def timed_scheduler(bot: Bot):
                 slot = (now_local.date().isoformat(), now_local.hour)
                 if slot not in _club_opened_slots:
                     _club_opened_slots.add(slot)
-                    await open_level_competitions(bot)
+                    await open_level_competitions(bot, schedule_key=f"{now_local.date().isoformat()}T{now_local.hour:02d}")
                     if len(_club_opened_slots) > 64:
                         today = now_local.date().isoformat()
                         _club_opened_slots.intersection_update({x for x in _club_opened_slots if x[0] == today})
