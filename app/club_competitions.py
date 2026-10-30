@@ -4,7 +4,8 @@ import logging
 import random
 from datetime import datetime, timezone
 from aiogram import F, Bot, Dispatcher
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from app.competition_images import render_roster
 from app.db import get_pool
 
 log = logging.getLogger(__name__)
@@ -50,6 +51,11 @@ async def open_level_competitions(bot: Bot):
             cid = await conn.fetchval(
                 """INSERT INTO club_competitions(business_level,status,opens_at,closes_at)
                    VALUES($1,'joining',NOW(),NOW()+INTERVAL '5 minutes') RETURNING id""", level
+            )
+            await conn.execute(
+                """INSERT INTO club_competition_participants(competition_id,player_id)
+                   SELECT $1,telegram_id FROM players WHERE is_npc=TRUE AND business_level=$2
+                   ON CONFLICT(competition_id,player_id) DO NOTHING""", cid, level
             )
             humans = await conn.fetch(
                 "SELECT telegram_id FROM players WHERE is_npc=FALSE AND business_level=$1", level
@@ -189,8 +195,56 @@ def ICONs(kind):
     return ICONS.get(kind, "⌛")
 
 
+async def _send_roster_updates(bot: Bot):
+    async with get_pool().acquire() as conn:
+        lobbies = await conn.fetch(
+            "SELECT id,business_level,opens_at,roster_updates_sent FROM club_competitions WHERE status='joining'"
+        )
+    now = datetime.now(timezone.utc)
+    for lobby in lobbies:
+        opened = lobby["opens_at"]
+        if isinstance(opened, str):
+            opened = datetime.fromisoformat(opened.replace("Z", "+00:00"))
+        if opened.tzinfo is None:
+            opened = opened.replace(tzinfo=timezone.utc)
+        sent = int(lobby["roster_updates_sent"] or 0)
+        elapsed = (now - opened).total_seconds()
+        if sent >= 4 or elapsed < (sent + 1) * 60:
+            continue
+        cid, level = int(lobby["id"]), int(lobby["business_level"])
+        async with get_pool().acquire() as conn:
+            participants = await conn.fetch(
+                """SELECT p.telegram_id,p.display_name,p.is_npc FROM club_competition_participants cp
+                   JOIN players p ON p.telegram_id=cp.player_id
+                   WHERE cp.competition_id=$1 ORDER BY p.is_npc,p.display_name""", cid
+            )
+        if not participants:
+            continue
+        try:
+            image = await render_roster(bot, level, participants)
+            for person in participants:
+                if person["is_npc"]:
+                    continue
+                try:
+                    await bot.send_photo(
+                        person["telegram_id"],
+                        BufferedInputFile(image, filename=f"level_{level}_roster_{sent+1}.png"),
+                        caption=f"🏛 <b>LEVEL {level} ROSTER UPDATE {sent+1}/4</b>\\n👥 {len(participants)} participants registered",
+                    )
+                except Exception:
+                    log.debug("Roster update delivery failed for %s", person["telegram_id"])
+        except Exception:
+            log.exception("Could not render roster image for competition %s", cid)
+        async with get_pool().acquire() as conn:
+            await conn.execute(
+                "UPDATE club_competitions SET roster_updates_sent=$1 WHERE id=$2 AND roster_updates_sent=$3",
+                sent + 1, cid, sent
+            )
+
+
 async def competition_lobby_tick(bot: Bot):
     """Close lobbies, create two distinct NPC matches per human, and advance rounds."""
+    await _send_roster_updates(bot)
     async with get_pool().acquire() as conn:
         due = await conn.fetch("SELECT id,business_level FROM club_competitions WHERE status='joining' AND closes_at<=NOW()")
         active = await conn.fetch("SELECT id FROM club_competition_matches WHERE status='active' AND deadline_at<=NOW()")
