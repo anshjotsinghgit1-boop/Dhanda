@@ -74,7 +74,7 @@ def event_countdown_text() -> str:
     return (
         "⏳ <b>UPCOMING EVENTS</b>\n"
         f"⛏️ Next mining lobby: <b>{countdown_label(mining_remaining)}</b> · 2-hour cycle\n"
-        f"🏛️ Club battle queue: <b>{countdown_label(club_remaining)}</b> · hourly cycle\n"
+        f"🏛️ Level club competition: <b>{countdown_label(club_remaining)}</b> · hourly cycle\n"
         "Use /events anytime to refresh these countdowns."
     )
 
@@ -158,9 +158,10 @@ def events_text() -> str:
         + "\n\n⛏️ <b>Mining</b>\n"
         "• Lobby opens every 2 hours and stays open for 5 minutes.\n"
         "• Minimum 3 applicants; 3–4 applicants: top 3 qualify; 5+: top 5 qualify by net worth.\n\n"
-        "🏛️ <b>Club battles</b>\n"
-        "• Queue opens hourly. Requires business level 12.\n"
-        "• Equal-level matchmaking · 15 seconds per round."
+        "🏛️ <b>Level club competitions</b>\n"
+        "• A five-minute lobby opens hourly for each active business level.\n"
+        "• Four roster image updates are sent during the lobby.\n"
+        "• Each participant faces two different opponents in best-of-three matches. Win both."
     )
 
 
@@ -261,7 +262,7 @@ async def contextual_rules(callback: CallbackQuery):
             "• Your business generates cash automatically.\n"
             "• Collect income to claim earnings, capped at 8 hours per collection.\n"
             "• Upgrades cost in-game cash and increase production.\n"
-            "• From level 12 onward, each upgrade requires two club-battle wins."
+            "• Club competition gates alternate: 12→13, 14→15, …, 52→53. Win both matches in that level’s competition."
         ),
         "rule_economy": (
             "💰 <b>ECONOMY RULES</b>\n\n"
@@ -271,12 +272,13 @@ async def contextual_rules(callback: CallbackQuery):
             "• Seasons last 7 days; temporary progress resets at settlement while eligible permanent progress persists."
         ),
         "rule_club": (
-            "🏰 <b>CLUB BATTLE RULES</b>\n\n"
-            "• Club battle access unlocks at business level 12.\n"
-            "• The queue opens hourly.\n"
-            "• Matchmaking pairs players at the same business level.\n"
-            "• Each round gives players 15 seconds to pick a box.\n"
-            "• Win two different opponents to satisfy the battle-win requirement."
+            "🏰 <b>LEVEL CLUB COMPETITION RULES</b>\n\n"
+            "• System-managed competitions open hourly for active business levels from 12+.\n"
+            "• The joining window lasts 5 minutes, with four roster image updates.\n"
+            "• Every participant faces two different opponents.\n"
+            "• Each match is best of three; each box round has a 15-second timer.\n"
+            "• You must win both matches in the same competition. Losing the first does not cancel the second.\n"
+            "• Only upgrades from levels 12, 14, 16, …, 52 require a competition win."
         ),
         "rule_mining": (
             "⛏️ <b>MINING RULES</b>\n\n"
@@ -585,35 +587,15 @@ async def resume_industry_command(message: Message):
 
 @dp.message(Command('club'))
 async def club_command(message: Message):
-    parts = (message.text or '').split(maxsplit=2)
-    if len(parts) == 1 or parts[1].lower() == 'me':
-        club = await my_club(message.from_user.id)
-        if not club:
-            await message.answer('You are not in a club. Create one with /club create Name | TAG or join using /club join TAG.')
-        else:
-            await message.answer(f'🏰 <b>{club["name"]} [{club["tag"]}]</b>\nRole: {club["role"]}\nMembers: {club["members"]}\nTreasury: {club["treasury"]:,} cash')
-        return
-    action = parts[1].lower()
-    if action == 'join' and len(parts) >= 3:
-        ok, result = await join_club(message.from_user.id, parts[2])
-    elif action == 'create' and len(parts) >= 3 and '|' in parts[2]:
-        name, tag = parts[2].split('|', 1)
-        ok, result = await create_club(message.from_user.id, name, tag)
-    else:
-        await message.answer('Commands:\n/club\n/club create Empire Crew | EC\n/club join EC')
-        return
-    await message.answer(('✅ ' if ok else '⚠️ ') + result)
-
+    await message.answer(
+        "🏛 <b>Clubs are managed by the game.</b>\n"
+        "Players do not create clubs, join by tags, or donate to club treasuries. "
+        "When your business reaches an eligible level, join the level competition from its private lobby."
+    )
 
 @dp.message(Command('donate'))
 async def donate_command(message: Message):
-    parts = (message.text or '').split()
-    if len(parts) != 2 or not parts[1].isdigit():
-        await message.answer('Use /donate 1000 to contribute cash to your club treasury.')
-        return
-    ok, result = await donate_to_club(message.from_user.id, int(parts[1]))
-    await message.answer(('✅ ' if ok else '⚠️ ') + result)
-
+    await message.answer("Club donations are disabled. Competitions are managed automatically by the game.")
 
 def battle_keyboard(battle_id, picked=None, outcomes=None):
     picked = set(picked or [])
@@ -886,12 +868,9 @@ async def hire_accept_command(message: Message):
 @dp.callback_query(F.data == 'help_club')
 async def help_club(callback: CallbackQuery):
     await callback.message.edit_text(
-        '🏰 <b>CLUB CONTROL</b>\n\n'
-        'Use /club to view your club.\n'
-        'Create one: /club create Empire Crew | EC\n'
-        'Join one: /club join EC\n'
-        'Donate: /donate 1000\n\n'
-        'Club battle queue opens hourly; battle access unlocks at business level 12.',
+        '🏰 <b>SYSTEM CLUB DIVISION</b>\n\n'
+        'Clubs are created and managed by the game. Players cannot create clubs, join by tags, or donate.\n\n'
+        'A five-minute level-specific competition lobby opens hourly. Join from its private message, follow the four roster updates, then play two different opponents. Win both best-of-three matches to pass.',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🏰 Club Rules", callback_data="rule_club", style="primary")],
             [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
