@@ -6,6 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQu
 from app.db import get_pool
 from app.club_live import club_battle_tick
 from app.club_competitions import open_level_competitions, competition_lobby_tick
+from app.npcs import advance_npcs
 from app.mining_team_wars import finalize_mining_event, mining_team_tick, register_mining_team_handlers
 
 log = logging.getLogger(__name__)
@@ -127,6 +128,10 @@ async def timed_scheduler(bot: Bot):
             raise
         except Exception:
             log.exception("Timed event scheduler error")
+        try:
+            await advance_npcs()
+        except Exception:
+            log.exception('NPC progression tick failed')
         await asyncio.sleep(5)
 
 def register_timed_handlers(bot: Bot, dp: Dispatcher):
