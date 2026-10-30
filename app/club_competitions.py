@@ -313,7 +313,7 @@ async def _resolve_match(bot: Bot, match_id: int, force_timeout=False):
             log.exception("Could not send final competition image to %s", human_id)
 
 
-async def _start_first_match(bot: Bot, cid: int, level: int, pid: int, match_id: int, opponent: int):
+async def _start_first_match(bot: Bot, level: int, pid: int, match_id: int, opponent: int):
     opponent_name = "NPC Opponent"
     async with get_pool().acquire() as conn:
         opponent_name = await conn.fetchval("SELECT display_name FROM players WHERE telegram_id=$1", opponent) or opponent_name
