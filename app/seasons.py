@@ -36,7 +36,7 @@ async def settle_expired_season() -> bool:
                           +COALESCE(a.asset_value,0) AS net_worth
                    FROM players p
                    LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
-                   WHERE p.season_id=$1
+                   WHERE p.season_id=$1 AND p.is_npc=FALSE
                    ORDER BY net_worth DESC,COALESCE(a.asset_value,0) DESC,p.stocks DESC,p.cash DESC,p.telegram_id ASC""",
                 season["id"],
             )
@@ -77,10 +77,11 @@ async def settle_expired_season() -> bool:
             # Preserve reputation and eligible permanent assets; reset temporary season wealth.
             await conn.execute(
                 """UPDATE players SET cash=1000, stocks=0, gold_grams=0, business_level=1,
-                   last_collected_at=NOW(), season_id=$1""",
+                   last_collected_at=NOW(), club_completed_level=0, season_id=$1 WHERE is_npc=FALSE""",
                 next_season["id"],
             )
-            await conn.execute("DELETE FROM player_assets WHERE permanent=FALSE")
+            await conn.execute("UPDATE players SET season_id=$1 WHERE is_npc=TRUE", next_season["id"])
+            await conn.execute("DELETE FROM player_assets WHERE permanent=FALSE AND player_id IN (SELECT telegram_id FROM players WHERE is_npc=FALSE)")
             await conn.execute("DELETE FROM player_stock_holdings")
             # Industrial buildings remain owned but pause until their owner resumes them.
             await conn.execute("UPDATE player_industries SET active=FALSE,last_settled_at=NOW()")
