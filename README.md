@@ -34,14 +34,18 @@ The local database is created automatically at `data/dhanda.sqlite3`. The `data/
 - Start with 1,000 cash and build a business through 54 levels.
 - Collect passive income (maximum 8 hours per collection) and reinvest in upgrades.
 - Every season lasts seven days. Settlement snapshots rankings and resets temporary cash/business progress.
-- Gold exchange, collectible assets, stocks, industrial buildings, clubs, employee challenges, business wars, and season rewards are part of the game.
+- Gold exchange, collectible assets, stocks, industrial buildings, system-managed level competitions, employee challenges, business wars, and season rewards are part of the game.
+- The world includes 50 persistent NPC business owners. NPCs earn passive income, progress through levels, and appear with an NPC label in the Forbes net-worth ranking.
+- Competition gates alternate: win both matches at Level 12 for 12→13; the next required competition is Level 14, continuing through 52→53.
 - Employees pay a 5% share of eligible collected income to their boss.
 
 ## Group mining
 
 - Group chats are reserved for mining; use the bot in private chat for the rest of the game.
 - Use `/miningwar` in a group to register it for scheduled mining events.
-- Timed mining events and the club battle queue are an initial MVP and still need live end-to-end testing.
+- Club competitions open hourly for active business levels from Level 12 onward. Each lobby lasts five minutes and sends four roster image updates.
+- Registered players face two different NPC opponents. Each match is best of three, with 15 seconds per box round. Both matches must be won in the same competition.
+- Competition result cards show both match outcomes. The bot flow still needs live end-to-end testing on the deployment device.
 
 ## Commands
 
@@ -50,7 +54,7 @@ The local database is created automatically at `data/dhanda.sqlite3`. The `data/
 - `/gold buy 2`, `/gold sell 1`
 - `/stocks`, `/stock buy ECOR 10`, `/stock sell ECOR 2`
 - `/industry`, `/buildindustry workshop`
-- `/club`, `/club create Empire Crew | EC`, `/club join EC`, `/donate 1000`
+- `/club` (explains system-managed clubs; player-created clubs and donations are disabled)
 - `/hire TELEGRAM_ID`, `/hireaccept CHALLENGE_ID`, `/war TELEGRAM_ID`
 - `/help`
 
