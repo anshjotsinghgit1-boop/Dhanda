@@ -87,7 +87,7 @@ async def render_competition_result(bot, level, player, matches, passed):
     output = BytesIO()
     image.save(output, format="PNG", optimize=True)
     return output.getvalue()
-async def render_forbes_leaderboard(bot, rows, total_players):
+async def render_forbes_leaderboard(bot, rows, total_players, title='FORBES LIST', subtitle='RANKED BY NET WORTH'):
     width, height = 1100, 1120
     image = Image.new("RGB", (width, height), (12, 18, 32))
     draw = ImageDraw.Draw(image)
@@ -96,8 +96,8 @@ async def render_forbes_leaderboard(bot, rows, total_players):
         draw.line((0, y, width, y), fill=(int(14+10*mix), int(23+13*mix), int(42+20*mix)))
     draw.rounded_rectangle((34, 28, width-34, 180), radius=28, fill=(24, 38, 63), outline=(75, 115, 160), width=2)
     draw.text((70, 55), "EMPIRE CENTURY  /  GLOBAL RANKINGS", font=_font(23), fill=(137, 190, 255))
-    draw.text((70, 95), "🏆 FORBES LIST", font=_font(46), fill=(248, 250, 255))
-    draw.text((72, 150), f"RANKED BY NET WORTH  •  {total_players} PLAYERS", font=_font(19), fill=(111, 224, 190))
+    draw.text((70, 95), title, font=_font(42), fill=(248, 250, 255))
+    draw.text((72, 150), f"{subtitle}  •  {total_players} PLAYERS", font=_font(17), fill=(111, 224, 190))
     podium = rows[:3]
     positions = [(397, 205, 305, 465), (65, 235, 305, 435), (729, 235, 305, 435)]
     medals = ["🥇", "🥈", "🥉"]
