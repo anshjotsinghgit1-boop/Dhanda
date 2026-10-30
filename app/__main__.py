@@ -312,7 +312,7 @@ async def more_menu(callback: CallbackQuery):
         "━━━━━━━━━━━━━━━━━━\n"
         "Choose a department. Each section opens its own focused screen.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🏆 FOSBU List", callback_data="ranking", style="primary"),
+            [InlineKeyboardButton(text="🏆 FORBES LIST", callback_data="ranking", style="primary"),
              InlineKeyboardButton(text="🪙 Gold & Markets", callback_data="help_gold", style="success")],
             [InlineKeyboardButton(text="🏭 Industry", callback_data="help_industry", style="primary"),
              InlineKeyboardButton(text="🏰 Club", callback_data="help_club", style="primary")],
@@ -391,16 +391,16 @@ async def upgrade(callback: CallbackQuery):
 @dp.callback_query(F.data == 'ranking')
 async def ranking(callback: CallbackQuery):
     async with get_pool().acquire() as conn:
-        rows = await conn.fetch('''SELECT p.display_name,p.cash,p.reputation,p.business_level,
+        rows = await conn.fetch('''SELECT p.display_name,p.is_npc,p.cash,p.business_level,
             p.stocks,p.gold_grams,
             p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth
             FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
-            ORDER BY worth DESC,p.reputation DESC,p.telegram_id ASC LIMIT 10''')
+            ORDER BY worth DESC,p.telegram_id ASC LIMIT 10''')
     if not rows:
         text = 'No players ranked yet. Be the first to build an empire!'
     else:
-        text = '🏆 <b>FOSBU LIST — TOP 10</b>\n\n' + '\n'.join(
-            f'{i}. {r["display_name"]} — 💎 {r["worth"]:,} NW | ⭐ {r["reputation"]:,}'
+        text = '🏆 <b>FORBES LIST — TOP 10</b>\n\n' + '\n'.join(
+            f'{i}. {"🤖 NPC · " if r["is_npc"] else ""}{r["display_name"]} — 💎 {r["worth"]:,} NW'
             for i, r in enumerate(rows, 1))
     try:
         await callback.message.edit_text(text, reply_markup=main_menu())
@@ -803,11 +803,11 @@ async def rank_command(message: Message):
     target = message.reply_to_message.from_user if message.reply_to_message and message.reply_to_message.from_user else message.from_user
     async with get_pool().acquire() as conn:
         row = await conn.fetchrow('''WITH ranked AS (
-                SELECT p.telegram_id, p.display_name, p.cash, p.reputation, p.business_level,
+                SELECT p.telegram_id, p.display_name, p.is_npc, p.cash, p.business_level,
                        p.stocks, p.gold_grams,
                        p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth,
                        ROW_NUMBER() OVER (ORDER BY p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) DESC,
-                                                    p.reputation DESC, p.telegram_id ASC) AS position,
+                                                    p.telegram_id ASC) AS position,
                        COUNT(*) OVER () AS total_players
                 FROM players p
                 LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
@@ -834,10 +834,10 @@ async def rank_command(message: Message):
 @dp.message(Command('ranking'))
 async def ranking_command(message: Message):
     async with get_pool().acquire() as conn:
-        rows = await conn.fetch('''SELECT p.display_name,p.cash,p.reputation,p.business_level,p.stocks,p.gold_grams,
-            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.assets,0) AS worth
-            FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id ORDER BY worth DESC,p.reputation DESC LIMIT 10''')
-    text = '🏆 <b>FOSBU LIST — TOP 10</b>\n\n' + ('\n'.join(f'{i}. {r["display_name"]} — {r["worth"]:,} NW' for i, r in enumerate(rows, 1)) if rows else 'No players yet.')
+        rows = await conn.fetch('''SELECT p.display_name,p.is_npc,p.cash,p.business_level,p.stocks,p.gold_grams,
+            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth
+            FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id ORDER BY worth DESC,p.telegram_id ASC LIMIT 10''')
+    text = '🏆 <b>FORBES LIST — TOP 10</b>\n\n' + ('\n'.join(f'{i}. {"🤖 NPC · " if r["is_npc"] else ""}{r["display_name"]} — 💎 {r["worth"]:,} NW' for i, r in enumerate(rows, 1)) if rows else 'No players yet.')
     await message.answer(text)
 
 
