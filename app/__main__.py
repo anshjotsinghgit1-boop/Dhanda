@@ -827,6 +827,37 @@ async def ranking_command(message: Message):
     )
 
 
+@dp.message(Command('season'))
+async def season_leaderboard_command(message: Message):
+    async with get_pool().acquire() as conn:
+        season = await conn.fetchrow(
+            "SELECT id,starts_at,ends_at FROM seasons WHERE settled_at IS NULL ORDER BY id DESC LIMIT 1"
+        )
+        if not season:
+            await message.answer("No active season found.")
+            return
+        rows = await conn.fetch('''SELECT p.telegram_id,p.display_name,p.is_npc,p.business_level,
+            p.cash+p.stocks+CAST(p.gold_grams*10 AS BIGINT)+COALESCE(a.asset_value,0) AS worth,
+            COUNT(*) OVER () AS total_players
+            FROM players p LEFT JOIN player_asset_valuation a ON a.player_id=p.telegram_id
+            WHERE p.season_id=$1
+            ORDER BY worth DESC,p.telegram_id ASC LIMIT 10''', season["id"])
+    if not rows:
+        await message.answer("No players have joined this season yet.")
+        return
+    starts = season["starts_at"].strftime("%d %b") if hasattr(season["starts_at"], "strftime") else str(season["starts_at"])[:10]
+    ends = season["ends_at"].strftime("%d %b") if hasattr(season["ends_at"], "strftime") else str(season["ends_at"])[:10]
+    subtitle = f"SEASON {season['id']}  •  {starts} — {ends}"
+    image = await render_forbes_leaderboard(
+        bot, rows, int(rows[0]["total_players"]),
+        title="WEEKLY LEADERBOARD", subtitle=subtitle,
+    )
+    await message.answer_photo(
+        BufferedInputFile(image, filename=f"season_{season['id']}_leaderboard.png"),
+        caption="📅 <b>WEEKLY SEASON LEADERBOARD</b> · Net worth ranking",
+    )
+
+
 @dp.message(Command('stocks'))
 async def stocks_command(message: Message):
     rows = await quotes()
