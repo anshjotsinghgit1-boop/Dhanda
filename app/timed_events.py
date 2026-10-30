@@ -80,6 +80,10 @@ async def announce_countdowns(bot: Bot, now: int):
 async def timed_scheduler(bot: Bot):
     last_mining = int(datetime.now(timezone.utc).timestamp()) // MINING_INTERVAL
     last_club = int(datetime.now(timezone.utc).timestamp()) // CLUB_INTERVAL
+    try:
+        await open_level_competitions(bot)
+    except Exception:
+        log.exception('Initial level competition opening failed')
     while True:
         try:
             now = int(datetime.now(timezone.utc).timestamp())
