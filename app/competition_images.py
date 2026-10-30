@@ -31,37 +31,98 @@ async def _avatar(bot, player):
     return im
 
 
+def _wrap_name(draw, name, font, max_width):
+    words = str(name or "Player").split()
+    lines, current = [], ""
+    for word in words:
+        candidate = word if not current else current + " " + word
+        if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
+            current = candidate
+            continue
+        if current:
+            lines.append(current)
+            current = ""
+        # Preserve long unbroken usernames instead of silently truncating them.
+        chunk = ""
+        for char in word:
+            if draw.textbbox((0, 0), chunk + char, font=font)[2] > max_width and chunk:
+                lines.append(chunk)
+                chunk = char
+            else:
+                chunk += char
+        current = chunk
+    if current:
+        lines.append(current)
+    return lines or ["Player"]
+
+
 async def render_roster(bot, level, participants):
+    """High-resolution roster with wrapped, fully visible player names."""
     columns = 2
-    rows = (len(participants) + columns - 1) // columns
-    width, row_h, header_h = 1100, 112, 250
-    height = max(420, header_h + rows * row_h + 48)
+    width, margin, gap = 1800, 42, 28
+    card_w = (width - 2 * margin - gap) // columns
+    avatar_size = 112
+    name_font, meta_font = _font(30), _font(19)
+    image = Image.new("RGB", (width, 600), (12, 18, 32))
+    draw = ImageDraw.Draw(image)
+    prepared = []
+    for player in participants:
+        name = str(player["display_name"] or "Player").replace("🤖 NPC · ", "")
+        lines = _wrap_name(draw, name, name_font, card_w - avatar_size - 54)
+        prepared.append((player, lines))
+    row_heights = []
+    for row in range((len(prepared) + 1) // 2):
+        members = prepared[row * 2:row * 2 + 2]
+        max_lines = max((len(item[1]) for item in members), default=1)
+        row_heights.append(max(154, 42 + max_lines * 38 + 30))
+    header_h = 248
+    height = header_h + sum(row_heights) + 54
     image = Image.new("RGB", (width, height), (12, 18, 32))
     draw = ImageDraw.Draw(image)
     for y in range(height):
         mix = y / max(1, height)
         color = (int(14 + 10 * mix), int(23 + 13 * mix), int(42 + 20 * mix))
         draw.line((0, y, width, y), fill=color)
-    draw.rounded_rectangle((36, 30, width - 36, 208), radius=30, fill=(24, 38, 63), outline=(75, 115, 160), width=2)
-    draw.text((70, 58), "EMPIRE CENTURY  /  CLUB DIVISION", font=_font(23), fill=(137, 190, 255))
-    draw.text((70, 100), f"LEVEL {level} COMPETITION", font=_font(42), fill=(248, 250, 255))
-    draw.text((72, 164), f"LIVE ROSTER  •  {len(participants)} PARTICIPANTS", font=_font(23), fill=(111, 224, 190))
-    for index, player in enumerate(participants):
-        col, row = index % 2, index // 2
-        x, y = 36 + col * 520, header_h + row * row_h
-        draw.rounded_rectangle((x, y, x + 500, y + 94), radius=20, fill=(29, 43, 67), outline=(55, 76, 108), width=1)
-        avatar = await _avatar(bot, player)
-        mask = Image.new("L", (76, 76), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, 75, 75), fill=255)
-        image.paste(avatar, (x + 12, y + 9), mask)
-        name = str(player["display_name"] or "Player").replace("🤖 NPC · ", "")
-        draw.text((x + 104, y + 17), name[:28], font=_font(22), fill=(245, 248, 255))
-        tag = "NPC" if player["is_npc"] else "PLAYER"
-        draw.text((x + 104, y + 53), f"{tag}  •  BUSINESS LEVEL {level}", font=_font(15), fill=(143, 174, 207))
-    draw.text((42, height - 32), "Two different opponents  •  Two match wins required", font=_font(16), fill=(145, 165, 193))
+    draw.rounded_rectangle((margin, 28, width - margin, 214), radius=32,
+                           fill=(24, 38, 63), outline=(75, 115, 160), width=3)
+    draw.text((82, 58), "EMPIRE CENTURY  /  CLUB DIVISION",
+              font=_font(27), fill=(137, 190, 255))
+    draw.text((82, 105), f"LEVEL {level} COMPETITION",
+              font=_font(52), fill=(248, 250, 255))
+    draw.text((84, 174), f"ROSTER  •  {len(prepared)} PARTICIPANTS",
+              font=_font(27), fill=(111, 224, 190))
+    y = header_h
+    for row, row_h in enumerate(row_heights):
+        for col in range(columns):
+            index = row * columns + col
+            if index >= len(prepared):
+                continue
+            player, lines = prepared[index]
+            x = margin + col * (card_w + gap)
+            draw.rounded_rectangle((x, y, x + card_w, y + row_h - 12),
+                                   radius=22, fill=(29, 43, 67),
+                                   outline=(65, 91, 128), width=2)
+            avatar = await _avatar(bot, player)
+            avatar = ImageOps.fit(avatar, (avatar_size, avatar_size))
+            mask = Image.new("L", (avatar_size, avatar_size), 0)
+            ImageDraw.Draw(mask).ellipse((0, 0, avatar_size - 1, avatar_size - 1), fill=255)
+            image.paste(avatar, (x + 18, y + 15), mask)
+            text_x, text_y = x + avatar_size + 42, y + 15
+            for line in lines:
+                draw.text((text_x, text_y), line, font=name_font, fill=(248, 250, 255))
+                text_y += 38
+            tag = "NPC CHARACTER" if player["is_npc"] else "PLAYER"
+            draw.text((text_x, max(y + 15 + len(lines) * 38, y + 91)),
+                      f"{tag}  •  BUSINESS LEVEL {level}",
+                      font=meta_font, fill=(143, 174, 207))
+        y += row_h
+    draw.text((margin + 4, height - 38),
+              "TWO DIFFERENT OPPONENTS  •  TWO MATCH WINS REQUIRED",
+              font=_font(19), fill=(145, 165, 193))
     output = BytesIO()
     image.save(output, format="PNG", optimize=True)
     return output.getvalue()
+
 async def render_competition_result(bot, level, player, matches, passed):
     width, height = 1100, 650
     image = Image.new("RGB", (width, height), (12, 18, 32))
