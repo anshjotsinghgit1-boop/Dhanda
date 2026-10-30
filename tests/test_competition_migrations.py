@@ -113,7 +113,7 @@ class CompetitionMigrationTests(unittest.TestCase):
                VALUES(?,101,-1,1,'[]','[]',1)""",
             (self.competition_id,),
         )
-        self.db.executescript(MIGRATIONS[-1].read_text(encoding="utf-8"))
+        self.db.executescript((ROOT / "migrations/015_allow_reused_npc_opponents.sql").read_text(encoding="utf-8"))
         count = self.db.execute("SELECT COUNT(*) FROM club_competition_matches").fetchone()[0]
         self.assertEqual(count, 1)
 
