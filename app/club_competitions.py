@@ -33,8 +33,11 @@ def join_keyboard(competition_id: int):
     ]])
 
 
-async def open_level_competitions(bot: Bot):
-    """Open one five-minute lobby per active human business level."""
+async def open_level_competitions(bot: Bot, schedule_key: str | None = None):
+    """Open a five-minute lobby for every active level in one hourly IST slot."""
+    if schedule_key is None:
+        schedule_key = datetime.now().strftime('%Y-%m-%dT%H')
+
     async with get_pool().acquire() as conn:
         levels = await conn.fetch(
             "SELECT DISTINCT business_level FROM players WHERE is_npc=FALSE AND business_level>=12 ORDER BY business_level"
@@ -42,16 +45,14 @@ async def open_level_competitions(bot: Bot):
     for item in levels:
         level = int(item["business_level"])
         async with get_pool().acquire() as conn:
-            exists = await conn.fetchval(
-                "SELECT id FROM club_competitions WHERE business_level=$1 AND status IN ('joining','running')",
-                level,
-            )
-            if exists:
-                continue
             cid = await conn.fetchval(
-                """INSERT INTO club_competitions(business_level,status,opens_at,closes_at)
-                   VALUES($1,'joining',NOW(),NOW()+INTERVAL '5 minutes') RETURNING id""", level
+                """INSERT INTO club_competitions(business_level,status,opens_at,closes_at,schedule_key)
+                   VALUES($1,'joining',NOW(),NOW()+INTERVAL '5 minutes',$2)
+                   ON CONFLICT(business_level,schedule_key) DO NOTHING RETURNING id""",
+                level, schedule_key
             )
+            if cid is None:
+                continue
             await conn.execute(
                 """INSERT INTO club_competition_participants(competition_id,player_id)
                    SELECT $1,telegram_id FROM players WHERE is_npc=TRUE AND business_level=$2
