@@ -5,6 +5,7 @@ from aiogram import F, Bot, Dispatcher
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from app.db import get_pool
 from app.club_live import club_battle_tick
+from app.club_competitions import open_level_competitions, competition_lobby_tick
 from app.mining_team_wars import finalize_mining_event, mining_team_tick, register_mining_team_handlers
 
 log = logging.getLogger(__name__)
@@ -99,7 +100,7 @@ async def timed_scheduler(bot: Bot):
                 await notify_players(bot, "⛏️ Mining is LIVE in your registered group! You have 5 minutes to join. Open the group event message and tap JOIN MINING.")
             if cs != last_club:
                 last_club = cs
-                await notify_players(bot, "🏛️ <b>CLUB BATTLE QUEUE IS OPEN!</b>\n⚔️ Level 12+ · equal-level opponents · 15-second rounds. Tap JOIN CLUB BATTLE to queue.", InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏛 JOIN CLUB BATTLE", callback_data="cbq_join")]]))
+                await open_level_competitions(bot)
             async with get_pool().acquire() as conn:
                 due = await conn.fetch("SELECT id,chat_id FROM timed_mining_events WHERE status='joining' AND closes_at<=NOW()")
             for event in due:
@@ -117,10 +118,11 @@ async def timed_scheduler(bot: Bot):
                 log.exception("Cross-group mining war tick failed")
             try:
                 await club_battle_tick(bot)
+                await competition_lobby_tick()
             except asyncio.CancelledError:
                 raise
             except Exception:
-                log.exception("Club battle timeout processing failed")
+                log.exception("Club competition tick failed")
         except asyncio.CancelledError:
             raise
         except Exception:
