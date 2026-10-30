@@ -73,14 +73,14 @@ async def _refresh_war_screens(bot: Bot, force=False):
                 row["war_id"], row["matchup_number"]
             )
         labels = {"money": "💰 MONEY", "normal": "⚪ NORMAL", "empty": "🕳 EMPTY"}
-        reveal = "\\n".join(
+        reveal = "\n".join(
             f"🔓 {item['display_name']}: Box {item['box_number']} → {labels[item['box_kind']]}"
             for item in reversed(recent)
         )
         text = (
-            f"⚔️ <b>MINING WAR #{row['war_id']} · MATCHUP {row['matchup_number']}/4</b>\\n"
-            f"👥 Team size: {row['team_size']} vs {row['team_size']}\\n"
-            f"{label}\\n{reveal}\\n"
+            f"⚔️ <b>MINING WAR #{row['war_id']} · MATCHUP {row['matchup_number']}/4</b>\n"
+            f"👥 Team size: {row['team_size']} vs {row['team_size']}\n"
+            f"{label}\n{reveal}\n"
             "Each qualified teammate opens one box before the shared timer ends."
         )
         await _edit_war_screen(bot, row["main_chat"], row["main_message_id"], text, markup)
@@ -160,7 +160,7 @@ async def matchmake_waiting_teams(bot: Bot):
     sent_messages = []
     for index, team in enumerate(teams):
         try:
-            suffix = "\\n⏳ Matchup 1 starts in 3..." if index <= 1 else "\\n⌛ Your matchup will start after the previous team finishes."
+            suffix = "\n⏳ Matchup 1 starts in 3..." if index <= 1 else "\n⌛ Your matchup will start after the previous team finishes."
             sent_messages.append(await bot.send_message(team["chat_id"], intro + suffix))
         except Exception:
             sent_messages.append(None)
@@ -220,7 +220,7 @@ async def mining_team_tick(bot: Bot):
                     if int(item["matchup_number"])==4:
                         await conn.execute("UPDATE mining_team_wars SET status='won',finished_at=NOW(),main_wins=4 WHERE id=$1",item["war_id"])
                         await conn.execute("UPDATE mining_teams SET status='finished' WHERE id IN (SELECT main_team_id FROM mining_team_wars WHERE id=$1 UNION SELECT opponent_team_id FROM mining_team_war_opponents WHERE war_id=$1)",item["war_id"])
-                        result="🏆 <b>MINING WAR WON!</b> Your team won all four matchups.\\n💰 Your group earns +15% collection for known members; winning team members get +30% until the next mining."
+                        result="🏆 <b>MINING WAR WON!</b> Your team won all four matchups.\n💰 Your group earns +15% collection for known members; winning team members get +30% until the next mining."
                     else:
                         nxt=int(item["matchup_number"])+1
                         await conn.execute("UPDATE mining_team_wars SET current_matchup=$2,main_wins=main_wins+1 WHERE id=$1",item["war_id"],nxt)
@@ -230,7 +230,7 @@ async def mining_team_tick(bot: Bot):
                                WHERE war_id=$2 AND matchup_number=$3""",
                             item["main_message_id"],item["war_id"],nxt
                         )
-                        result=f"✅ <b>MATCHUP {item['matchup_number']} WON</b> — {aw}–{bw}.\\n⏳ MATCHUP {nxt}/4 starts in 3..."
+                        result=f"✅ <b>MATCHUP {item['matchup_number']} WON</b> — {aw}–{bw}.\n⏳ MATCHUP {nxt}/4 starts in 3..."
                         next_matchup = nxt
                 else:
                     await conn.execute("UPDATE mining_team_war_opponents SET status='lost' WHERE war_id=$1 AND matchup_number=$2",item["war_id"],item["matchup_number"])
