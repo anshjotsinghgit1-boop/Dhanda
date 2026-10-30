@@ -1,15 +1,90 @@
 """Automatic cross-group mining team battles."""
 import random
+import math
+from datetime import datetime, timezone
 from app.db import get_pool
 from app.mining_rewards import award_mining_group_win
 from aiogram import F, Bot, Dispatcher
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 def _box_kb(war_id, matchup):
+    styles = ("primary", "success", "danger")
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"📦 {n}", callback_data=f"mtpick_{war_id}_{matchup}_{n}") for n in range(start,start+3)]
-        for start in (1,4,7)
+        [InlineKeyboardButton(text=f"📦 BOX {n}", callback_data=f"mtpick_{war_id}_{matchup}_{n}", style=styles[row_index])
+         for n in range(start, start + 3)]
+        for row_index, start in enumerate((1, 4, 7))
     ])
+
+
+def _as_utc(value):
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+async def _edit_war_screen(bot, chat_id, message_id, text, markup=None):
+    if not message_id:
+        return
+    try:
+        await bot.edit_message_text(chat_id=int(chat_id), message_id=int(message_id), text=text, reply_markup=markup)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).debug("Could not edit mining screen %s in %s", message_id, chat_id, exc_info=True)
+
+
+async def _refresh_war_screens(bot: Bot):
+    """Keep both groups on the same server deadline and edit countdown checkpoints."""
+    async with get_pool().acquire() as conn:
+        rows = await conn.fetch("""SELECT o.*,w.current_matchup,main.chat_id AS main_chat,
+            opp.chat_id AS opponent_chat,main.team_size
+            FROM mining_team_war_opponents o
+            JOIN mining_team_wars w ON w.id=o.war_id
+            JOIN mining_teams main ON main.id=w.main_team_id
+            JOIN mining_teams opp ON opp.id=o.opponent_team_id
+            WHERE w.status='active' AND o.status='active' AND o.deadline_at IS NOT NULL""")
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        deadline = _as_utc(row["deadline_at"])
+        remaining = max(0, (deadline - now).total_seconds())
+        if remaining > 15:
+            checkpoint = 100 + min(3, max(1, math.ceil(remaining - 15)))
+            label = f"⏳ MATCHUP STARTS IN {checkpoint - 100}..."
+            markup = None
+        else:
+            checkpoint = math.ceil(remaining)
+            label = f"⏱️ {checkpoint} SECONDS LEFT"
+            markup = _box_kb(int(row["war_id"]), int(row["matchup_number"]))
+        if checkpoint not in {101, 102, 103, 15, 10, 7, 5, 3, 1}:
+            continue
+        if int(row["countdown_mark"] or -1) == checkpoint:
+            continue
+        async with get_pool().acquire() as conn:
+            await conn.execute(
+                "UPDATE mining_team_war_opponents SET countdown_mark=$1 WHERE war_id=$2 AND matchup_number=$3 AND countdown_mark<>$1",
+                checkpoint, row["war_id"], row["matchup_number"]
+            )
+            recent = await conn.fetch(
+                """SELECT p.display_name,pick.box_number,pick.box_kind
+                   FROM mining_team_picks pick JOIN players p ON p.telegram_id=pick.player_id
+                   WHERE pick.war_id=$1 AND pick.matchup_number=$2
+                   ORDER BY pick.created_at DESC LIMIT 5""",
+                row["war_id"], row["matchup_number"]
+            )
+        labels = {"money": "💰 MONEY", "normal": "⚪ NORMAL", "empty": "🕳 EMPTY"}
+        reveal = "\\n".join(
+            f"🔓 {item['display_name']}: Box {item['box_number']} → {labels[item['box_kind']]}"
+            for item in reversed(recent)
+        )
+        text = (
+            f"⚔️ <b>MINING WAR #{row['war_id']} · MATCHUP {row['matchup_number']}/4</b>\\n"
+            f"👥 Team size: {row['team_size']} vs {row['team_size']}\\n"
+            f"{label}\\n{reveal}\\n"
+            "Each qualified teammate opens one box before the shared timer ends."
+        )
+        await _edit_war_screen(bot, row["main_chat"], row["main_message_id"], text, markup)
+        await _edit_war_screen(bot, row["opponent_chat"], row["opponent_message_id"], text, markup)
 
 async def finalize_mining_event(bot: Bot, event_id: int, chat_id: int):
     """Freeze applicants and qualify top three/five by net worth."""
@@ -82,14 +157,23 @@ async def matchmake_waiting_teams(bot: Bot):
     intro = (f"⚔️ <b>CROSS-GROUP MINING WAR #{war_id}</b>\n"
              f"Your {main['team_size']}-player team faces four real teams from other groups. Win all four matchups. "
              "Each matchup has a simultaneous 15-second box-pick window.")
+    sent_messages = []
     for team in teams:
         try:
-            await bot.send_message(team["chat_id"],intro,reply_markup=_box_kb(int(war_id),1))
+            sent_messages.append(await bot.send_message(team["chat_id"], intro + "\\n⏳ Matchup starts in 3..."))
         except Exception:
-            pass
+            sent_messages.append(None)
+    main_message_id = sent_messages[0].message_id if sent_messages[0] else None
+    opponent_message_id = sent_messages[1].message_id if sent_messages[1] else None
+    async with get_pool().acquire() as conn:
+        await conn.execute(
+            """UPDATE mining_team_war_opponents SET main_message_id=$1,opponent_message_id=$2
+               WHERE war_id=$3 AND matchup_number=1""",
+            main_message_id, opponent_message_id, war_id
+        )
 
 async def _start_matchup(conn, war_id: int, matchup: int):
-    await conn.execute("UPDATE mining_team_war_opponents SET status='active',deadline_at=NOW()+INTERVAL '15 seconds' WHERE war_id=$1 AND matchup_number=$2",war_id,matchup)
+    await conn.execute("UPDATE mining_team_war_opponents SET status='active',deadline_at=NOW()+INTERVAL '18 seconds',countdown_mark=-1 WHERE war_id=$1 AND matchup_number=$2",war_id,matchup)
     rows = await conn.fetch("""SELECT tp.player_id FROM mining_team_war_opponents o
         JOIN mining_team_wars w ON w.id=o.war_id
         JOIN mining_team_players tp ON tp.team_id=w.main_team_id OR tp.team_id=o.opponent_team_id
@@ -100,17 +184,23 @@ async def _start_matchup(conn, war_id: int, matchup: int):
         await conn.execute("INSERT INTO mining_team_layouts(war_id,matchup_number,player_id,layout) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING",war_id,matchup,row["player_id"],",".join(layout))
 
 async def mining_team_tick(bot: Bot):
-    """Resolve a matchup after its server-side deadline, then advance or end the war."""
+    """Resolve a matchup on its shared deadline and reuse both group messages."""
+    await _refresh_war_screens(bot)
     async with get_pool().acquire() as conn:
-        due = await conn.fetch("""SELECT o.war_id,o.matchup_number,w.main_team_id,main.event_id AS main_event_id,main.team_size,main.chat_id AS main_chat,
+        due = await conn.fetch("""SELECT o.war_id,o.matchup_number,o.main_message_id,o.opponent_message_id,
+            w.main_team_id,main.event_id AS main_event_id,main.team_size,main.chat_id AS main_chat,
             o.opponent_team_id,opp.chat_id AS opponent_chat
             FROM mining_team_war_opponents o JOIN mining_team_wars w ON w.id=o.war_id
             JOIN mining_teams main ON main.id=w.main_team_id JOIN mining_teams opp ON opp.id=o.opponent_team_id
             WHERE w.status='active' AND o.status='active' AND o.deadline_at<=NOW()""")
     for item in due:
+        next_matchup = None
         async with get_pool().acquire() as conn:
             async with conn.transaction():
-                current = await conn.fetchrow("SELECT status FROM mining_team_war_opponents WHERE war_id=$1 AND matchup_number=$2 AND status='active' AND deadline_at<=NOW()",item["war_id"],item["matchup_number"])
+                current = await conn.fetchrow(
+                    "SELECT status FROM mining_team_war_opponents WHERE war_id=$1 AND matchup_number=$2 AND status='active' AND deadline_at<=NOW()",
+                    item["war_id"], item["matchup_number"]
+                )
                 if not current:
                     continue
                 a = await conn.fetch("SELECT player_id,roster_position FROM mining_team_players WHERE team_id=$1 ORDER BY roster_position",item["main_team_id"])
@@ -128,12 +218,18 @@ async def mining_team_tick(bot: Bot):
                     if int(item["matchup_number"])==4:
                         await conn.execute("UPDATE mining_team_wars SET status='won',finished_at=NOW(),main_wins=4 WHERE id=$1",item["war_id"])
                         await conn.execute("UPDATE mining_teams SET status='finished' WHERE id IN (SELECT main_team_id FROM mining_team_wars WHERE id=$1 UNION SELECT opponent_team_id FROM mining_team_war_opponents WHERE war_id=$1)",item["war_id"])
-                        result="🏆 <b>MINING WAR WON!</b> Your team won all four matchups.\n💰 Your group earns +15% collection for known members; winning team members get +30% until the next mining."
+                        result="🏆 <b>MINING WAR WON!</b> Your team won all four matchups.\\n💰 Your group earns +15% collection for known members; winning team members get +30% until the next mining."
                     else:
                         nxt=int(item["matchup_number"])+1
                         await conn.execute("UPDATE mining_team_wars SET current_matchup=$2,main_wins=main_wins+1 WHERE id=$1",item["war_id"],nxt)
                         await _start_matchup(conn,int(item["war_id"]),nxt)
-                        result=f"✅ <b>MATCHUP {item['matchup_number']} WON</b> — {aw}–{bw}. Next matchup starts now."
+                        await conn.execute(
+                            """UPDATE mining_team_war_opponents SET main_message_id=$1,opponent_message_id=$2
+                               WHERE war_id=$3 AND matchup_number=$4""",
+                            item["main_message_id"],item["opponent_message_id"],item["war_id"],nxt
+                        )
+                        result=f"✅ <b>MATCHUP {item['matchup_number']} WON</b> — {aw}–{bw}.\\n⏳ MATCHUP {nxt}/4 starts in 3..."
+                        next_matchup = nxt
                 else:
                     await conn.execute("UPDATE mining_team_war_opponents SET status='lost' WHERE war_id=$1 AND matchup_number=$2",item["war_id"],item["matchup_number"])
                     await conn.execute("UPDATE mining_team_wars SET status='lost',finished_at=NOW() WHERE id=$1",item["war_id"])
@@ -147,13 +243,15 @@ async def mining_team_tick(bot: Bot):
             except Exception:
                 import logging
                 logging.getLogger(__name__).exception("Could not award mining group bonus for war %s", item["war_id"])
-        for chat_id in {int(item["main_chat"]),int(item["opponent_chat"])}:
-            try:
-                await bot.send_message(chat_id,result)
-                if "Next matchup" in result:
-                    await bot.send_message(chat_id,f"⚔️ <b>MATCHUP {int(item['matchup_number'])+1}</b> — choose one box within 15 seconds.",reply_markup=_box_kb(int(item["war_id"]),int(item["matchup_number"])+1))
-            except Exception:
-                pass
+        for chat_id, message_id in (
+            (int(item["main_chat"]), item["main_message_id"]),
+            (int(item["opponent_chat"]), item["opponent_message_id"]),
+        ):
+            await _edit_war_screen(
+                bot, chat_id, message_id, result,
+                _box_kb(int(item["war_id"]), next_matchup) if next_matchup else None
+            )
+
 
 def register_mining_team_handlers(bot: Bot, dp: Dispatcher):
     @dp.callback_query(F.data.startswith("mtpick_"))
