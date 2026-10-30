@@ -172,8 +172,21 @@ async def connect() -> None:
     root = Path(__file__).resolve().parent.parent
     try:
         _apply_script(conn, (root / "schema.sql").read_text(encoding="utf-8"))
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS schema_migrations (
+                name TEXT PRIMARY KEY,
+                applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
         for migration in sorted((root / "migrations").glob("*.sql")):
+            name = migration.name
+            applied = conn.execute(
+                "SELECT 1 FROM schema_migrations WHERE name=?", (name,)
+            ).fetchone()
+            if applied:
+                continue
             _apply_script(conn, migration.read_text(encoding="utf-8"))
+            conn.execute("INSERT INTO schema_migrations(name) VALUES(?)", (name,))
     except Exception:
         conn.close()
         raise
