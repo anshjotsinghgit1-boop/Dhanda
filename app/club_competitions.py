@@ -417,19 +417,16 @@ async def competition_lobby_tick(bot: Bot):
                         """INSERT INTO club_competition_matches
                            (competition_id,player_a,player_b,match_number,round_number,
                             layout_a,layout_b,picked_b,deadline_at)
-                           VALUES($1,$2,$3,$4,1,$5,$6,$7,NOW()+INTERVAL '15 seconds')""",
+                           VALUES($1,$2,$3,$4,1,$5,$6,$7,
+                                  CASE WHEN $4=1 THEN NOW()+INTERVAL '18 seconds' ELSE NULL END)""",
                         cid, pid, opponent, match_no, la, lb, random.randint(1,9)
                     )
-                    match_id = await conn.fetchval("SELECT last_insert_rowid()")
-                    try:
-                        await bot.send_message(
-                            pid,
-                            f"🏛 <b>LEVEL {level} MATCH {match_no}/2</b>\nOpponent: {await conn.fetchval('SELECT display_name FROM players WHERE telegram_id=$1', opponent)}\n"
-                            f"Win this best-of-three match. First to 2 rounds wins. You have {ROUND_SECONDS} seconds per round.",
-                            reply_markup=_boxes(int(match_id)),
-                        )
-                    except Exception:
-                        log.debug("Could not send match to player %s", pid)
+                    match_id = int(await conn.fetchval("SELECT last_insert_rowid()"))
+                    if match_no == 1:
+                        try:
+                            await _start_first_match(bot, level, pid, match_id, opponent)
+                        except Exception:
+                            log.exception("Could not start first club match for player %s", pid)
     for item in active:
         try:
             await _resolve_match(bot, int(item["id"]), force_timeout=True)
@@ -485,14 +482,40 @@ def register_competition_handlers(bot: Bot, dp: Dispatcher):
             if m["picked_a"] is not None:
                 await c.answer("You've already picked this round.", show_alert=True)
                 return
-            deadline = m["deadline_at"]
-            if deadline and deadline.tzinfo is None:
-                deadline = deadline.replace(tzinfo=timezone.utc)
-            if deadline and datetime.now(timezone.utc) > deadline:
+            deadline = _as_utc(m["deadline_at"])
+            if not deadline or deadline <= datetime.now(timezone.utc):
                 await c.answer("Round time is over.", show_alert=True)
                 return
-            await conn.execute("UPDATE club_competition_matches SET picked_a=$1 WHERE id=$2 AND picked_a IS NULL", box_no, match_id)
-            picked = await conn.fetchrow("SELECT picked_a,picked_b FROM club_competition_matches WHERE id=$1", match_id)
-        await c.answer("Box selected.")
-        if picked and picked["picked_a"] is not None and picked["picked_b"] is not None:
-            await _resolve_match(bot, match_id)
+            if (deadline - datetime.now(timezone.utc)).total_seconds() > ROUND_SECONDS:
+                await c.answer("The match countdown is still running.", show_alert=True)
+                return
+            await conn.execute(
+                "UPDATE club_competition_matches SET picked_a=$1 WHERE id=$2 AND picked_a IS NULL",
+                box_no, match_id
+            )
+            picked = await conn.fetchrow(
+                "SELECT picked_a,layout_a,deadline_at,wins_a,wins_b,round_number,match_number FROM club_competition_matches WHERE id=$1",
+                match_id
+            )
+        await c.answer("Box opened!")
+        if picked and picked["picked_a"] is not None:
+            layout = json.loads(picked["layout_a"])
+            kind = layout[box_no - 1]
+            remaining = max(0, math.ceil((_as_utc(picked["deadline_at"]) - datetime.now(timezone.utc)).total_seconds()))
+            text = (
+                f"🏛 <b>LEVEL MATCH {picked['match_number']}/2 · ROUND {picked['round_number']}</b>\n"
+                f"🔓 You opened Box {box_no}: {ICONS[kind]} <b>{kind.upper()}</b>\n"
+                f"Score: {picked['wins_a']}–{picked['wins_b']}\n"
+                f"⏱️ {remaining} seconds left. Waiting for the round timer..."
+            )
+            try:
+                await c.message.edit_text(
+                    text,
+                    reply_markup=_boxes(match_id, box_no, kind),
+                )
+            except Exception:
+                log.debug("Could not reveal selected box for match %s", match_id, exc_info=True)
+
+    @dp.callback_query(F.data == "ccp_done")
+    async def opened_box_again(c: CallbackQuery):
+        await c.answer("That box is already open.", show_alert=False)
