@@ -234,7 +234,8 @@ async def _send_roster_updates(bot: Bot):
             opened = opened.replace(tzinfo=timezone.utc)
         sent = int(lobby["roster_updates_sent"] or 0)
         elapsed = (now - opened).total_seconds()
-        if sent >= 4 or elapsed < (sent + 1) * 60:
+        update_no = min(4, int(elapsed // 60))
+        if sent >= 4 or update_no <= sent:
             continue
         cid, level = int(lobby["id"]), int(lobby["business_level"])
         async with get_pool().acquire() as conn:
@@ -253,8 +254,8 @@ async def _send_roster_updates(bot: Bot):
                 try:
                     await bot.send_photo(
                         person["telegram_id"],
-                        BufferedInputFile(image, filename=f"level_{level}_roster_{sent+1}.png"),
-                        caption=f"🏛 <b>LEVEL {level} ROSTER UPDATE {sent+1}/4</b>\\n👥 {len(participants)} participants registered",
+                        BufferedInputFile(image, filename=f"level_{level}_roster_{update_no}.png"),
+                        caption=f"🏛 <b>LEVEL {level} ROSTER UPDATE {update_no}/4</b>\\n👥 {len(participants)} participants registered",
                     )
                 except Exception:
                     log.debug("Roster update delivery failed for %s", person["telegram_id"])
@@ -263,7 +264,7 @@ async def _send_roster_updates(bot: Bot):
         async with get_pool().acquire() as conn:
             await conn.execute(
                 "UPDATE club_competitions SET roster_updates_sent=$1 WHERE id=$2 AND roster_updates_sent=$3",
-                sent + 1, cid, sent
+                update_no, cid, sent
             )
 
 
