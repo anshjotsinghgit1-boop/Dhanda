@@ -19,7 +19,6 @@ from app.npcs import seed_npcs
 from app.keyboards import main_menu, my_empire_keyboard, back_home_keyboard
 from app.seasons import season_scheduler
 from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry, resume_industry
-from app.clubs import create_club, join_club, my_club, donate_to_club
 from app.wars import net_worth
 from app.box_battles import new_layout, save_layout, random_layout
 from app.employees import send_challenge, accept_challenge
@@ -27,7 +26,6 @@ from app.stocks import quotes, holdings, trade
 from app.mining_wars import create_war, join_team, war_snapshot, start_fight, cancel_war
 from app.timed_events import register_timed_handlers, timed_scheduler, register_mining_group
 from app.mining_rewards import MiningGroupMemberTracker, top_mining_groups
-from app.club_live import register_club_live_handlers
 from app.club_competitions import register_competition_handlers
 
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +40,6 @@ async def register_group_when_bot_added(event: ChatMemberUpdated):
         return
     if event.new_chat_member.status in ("member", "administrator"):
         await register_mining_group(event.chat.id, event.chat.title or "Mining group")
-register_club_live_handlers(bot, dp)
 register_competition_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
