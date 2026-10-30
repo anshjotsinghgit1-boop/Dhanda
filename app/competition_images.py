@@ -99,7 +99,7 @@ async def render_forbes_leaderboard(bot, rows, total_players):
     draw.text((70, 95), "🏆 FORBES LIST", font=_font(46), fill=(248, 250, 255))
     draw.text((72, 150), f"RANKED BY NET WORTH  •  {total_players} PLAYERS", font=_font(19), fill=(111, 224, 190))
     podium = rows[:3]
-    positions = [(65, 235, 305, 435), (397, 205, 305, 465), (729, 235, 305, 435)]
+    positions = [(397, 205, 305, 465), (65, 235, 305, 435), (729, 235, 305, 435)]
     medals = ["🥇", "🥈", "🥉"]
     for idx, (player, (x, y, w, h)) in enumerate(zip(podium, positions)):
         draw.rounded_rectangle((x, y, x+w, y+h), radius=24, fill=(29, 43, 67), outline=(83, 112, 151), width=2)
@@ -117,11 +117,15 @@ async def render_forbes_leaderboard(bot, rows, total_players):
     draw.text((72, 755), "TOP 10  /  NET WORTH", font=_font(22), fill=(137,190,255))
     for idx, player in enumerate(rows[3:10], start=4):
         y = 800 + (idx-4)*39
-        label = f"{idx:02d}  {str(player['display_name'] or 'Player')[:26]}"
+        avatar = await _avatar(bot, player)
+        mask = Image.new("L", (30, 30), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, 29, 29), fill=255)
+        image.paste(avatar.resize((30,30)), (72, y-5), mask)
+        label = f"{idx:02d}  {str(player['display_name'] or 'Player')[:23]}"
         if player["is_npc"]:
-            label = f"{idx:02d}  NPC · {str(player['display_name'] or 'NPC')[:22]}"
-        draw.text((75, y), label, font=_font(18), fill=(239,244,252))
-        draw.text((width-75, y), f"{int(player['worth']):,}", anchor="ra", font=_font(18), fill=(111,224,190))
+            label = f"{idx:02d}  NPC · {str(player['display_name'] or 'NPC')[:19]}"
+        draw.text((116, y), label, font=_font(17), fill=(239,244,252))
+        draw.text((width-75, y), f"{int(player['worth']):,}", anchor="ra", font=_font(17), fill=(111,224,190))
     output = BytesIO()
     image.save(output, format="PNG", optimize=True)
     return output.getvalue()
