@@ -18,7 +18,9 @@ class DatabaseStartupTests(unittest.TestCase):
             await connect()
             try:
                 seeded = await seed_npcs()
+                seeded_again = await seed_npcs()
                 self.assertEqual(seeded, 50)
+                self.assertEqual(seeded_again, 50)
                 async with get_pool().acquire() as conn:
                     count = await conn.fetchval("SELECT COUNT(*) FROM players WHERE is_npc=TRUE")
                     level_count = await conn.fetchval(
