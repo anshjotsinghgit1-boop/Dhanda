@@ -4,6 +4,8 @@ from html import escape
 import json
 import random
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
 
 from aiogram import Bot, Dispatcher, F
@@ -66,14 +68,24 @@ def countdown_label(seconds: int) -> str:
 
 
 def event_countdown_text() -> str:
-    now = int(time.time())
-    mining_remaining = 7200 - (now % 7200)
-    club_remaining = 3600 - (now % 3600)
+    now_epoch = int(time.time())
+    mining_remaining = 7200 - (now_epoch % 7200)
+    tz = ZoneInfo("Asia/Kolkata")
+    local_now = datetime.now(tz)
+    openings = []
+    for offset in range(0, 3):
+        day = (local_now + timedelta(days=offset)).date()
+        for hour in list(range(10, 24)) + [0]:
+            candidate = datetime(day.year, day.month, day.day, hour, 0, tzinfo=tz)
+            if candidate > local_now:
+                openings.append(candidate)
+    next_club = min(openings)
+    club_remaining = int((next_club - local_now).total_seconds())
     return (
-        "⏳ <b>UPCOMING EVENTS</b>\n"
-        f"⛏️ Next mining lobby: <b>{countdown_label(mining_remaining)}</b> · 2-hour cycle\n"
-        f"🏛️ Level club competition: <b>{countdown_label(club_remaining)}</b> · hourly cycle\n"
-        "Use /events anytime to refresh these countdowns."
+        "⏳ <b>UPCOMING EVENTS</b>\\n"
+        f"⛏️ Next mining lobby: <b>{countdown_label(mining_remaining)}</b> · 2-hour cycle\\n"
+        f"🏛️ Next level club: <b>{countdown_label(club_remaining)}</b> · {next_club.strftime('%I:%M %p')} IST\\n"
+        "Club competitions run hourly from 10:00 AM through 12:00 AM IST."
     )
 
 
