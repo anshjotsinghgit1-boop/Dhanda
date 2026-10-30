@@ -31,7 +31,7 @@ def boxes_kb(prefix, event_id, round_no):
 
 async def notify_players(bot, message, markup=None):
     async with get_pool().acquire() as conn:
-        rows = await conn.fetch("SELECT telegram_id FROM players")
+        rows = await conn.fetch("SELECT telegram_id FROM players WHERE is_npc=FALSE")
     for row in rows:
         try:
             await bot.send_message(row["telegram_id"], message, reply_markup=markup)
@@ -45,7 +45,7 @@ async def announce_countdowns(bot: Bot, now: int):
     """Broadcast 5-minute and 1-minute event reminders once per event cycle."""
     for event_name, interval, emoji, title in (
         ("mining", MINING_INTERVAL, "⛏️", "Mining lobby"),
-        ("club", CLUB_INTERVAL, "🏛️", "Club battle queue"),
+        ("club", CLUB_INTERVAL, "🏛️", "Level club competition"),
     ):
         remaining = interval - (now % interval)
         threshold = 300 if 295 < remaining <= 300 else 60 if 55 < remaining <= 60 else None
@@ -67,7 +67,7 @@ async def announce_countdowns(bot: Bot, now: int):
                 except Exception:
                     log.exception("Mining countdown announcement failed for group %s", group["chat_id"])
         else:
-            msg += "⚔️ Unlocks at business level 12 · same-level matchmaking · 15 seconds per round."
+            msg += "⏳ Five-minute join window · two different opponents · best-of-three matches."
         await notify_players(bot, msg)
         # Keep the in-memory dedupe set bounded during long-running Termux sessions.
         if len(_countdown_announced) > 500:
