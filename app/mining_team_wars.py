@@ -276,6 +276,11 @@ def register_mining_team_handlers(bot: Bot, dp: Dispatcher):
                     await c.answer("This matchup is not active for you.",show_alert=True); return
                 if row["deadline_at"] is None:
                     await c.answer("This matchup is not open.",show_alert=True); return
+                remaining = (_as_utc(row["deadline_at"]) - datetime.now(timezone.utc)).total_seconds()
+                if remaining <= 0:
+                    await c.answer("The matchup timer has ended.",show_alert=True); return
+                if remaining > 15:
+                    await c.answer("The matchup countdown is still running.",show_alert=True); return
                 exists=await conn.fetchval("SELECT 1 FROM mining_team_picks WHERE war_id=$1 AND matchup_number=$2 AND player_id=$3",war_id,matchup,c.from_user.id)
                 if exists:
                     await c.answer("You already picked a box this matchup.",show_alert=True); return
@@ -285,3 +290,4 @@ def register_mining_team_handlers(bot: Bot, dp: Dispatcher):
                 await conn.execute("INSERT INTO mining_team_picks(war_id,matchup_number,player_id,box_number,box_kind,temporary_worth) VALUES($1,$2,$3,$4,$5,$6)",war_id,matchup,c.from_user.id,box_no,kind,worth)
         desc={"money":"Money box: +20% temporary net worth","normal":"Normal box: net worth unchanged","empty":"Empty box: -20% temporary net worth"}[kind]
         await c.answer(desc,show_alert=True)
+        await _refresh_war_screens(bot, force=True)
