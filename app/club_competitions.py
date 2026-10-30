@@ -157,7 +157,7 @@ async def _refresh_active_match_screens(bot: Bot):
             )
         layout = json.loads(m["layout_a"])
         picked = int(m["picked_a"]) if m["picked_a"] else None
-        reveal = f"\n🔓 You opened Box {picked}: {ICONS[layout[picked-1]} {layout[picked-1].upper()}" if picked else ""
+        reveal = f"\n🔓 You opened Box {picked}: {ICONS[layout[picked-1]]} {layout[picked-1].upper()}" if picked else ""
         screen = (
             f"🏛 <b>LEVEL {m['business_level']} MATCH {m['match_number']}/2 · ROUND {m['round_number']}</b>\n"
             f"Opponent: {m['opponent_name']}\n"
