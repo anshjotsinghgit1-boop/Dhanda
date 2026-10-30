@@ -62,3 +62,28 @@ async def render_roster(bot, level, participants):
     output = BytesIO()
     image.save(output, format="PNG", optimize=True)
     return output.getvalue()
+async def render_competition_result(bot, level, player, matches, passed):
+    width, height = 1100, 650
+    image = Image.new("RGB", (width, height), (12, 18, 32))
+    draw = ImageDraw.Draw(image)
+    for y in range(height):
+        mix = y / height
+        draw.line((0, y, width, y), fill=(int(14+10*mix), int(23+13*mix), int(42+20*mix)))
+    title = "COMPETITION PASSED" if passed else "COMPETITION NOT PASSED"
+    accent = (105, 224, 174) if passed else (245, 145, 135)
+    draw.rounded_rectangle((34, 28, width-34, 175), radius=28, fill=(24, 38, 63), outline=accent, width=3)
+    draw.text((68, 55), f"LEVEL {level}  /  FINAL RESULT", font=_font(24), fill=(137, 190, 255))
+    draw.text((68, 100), title, font=_font(42), fill=accent)
+    draw.text((68, 190), "Both matches count — even when the first one is lost.", font=_font(20), fill=(190, 205, 225))
+    for index, match in enumerate(matches):
+        y = 245 + index * 165
+        draw.rounded_rectangle((38, y, width-38, y+140), radius=22, fill=(29, 43, 67), outline=(55, 76, 108), width=1)
+        name = str(match["opponent_name"] or "Opponent")
+        draw.text((70, y+24), f"MATCH {index+1}  •  {name[:34]}", font=_font(23), fill=(245, 248, 255))
+        score = f"{match['wins_a']} – {match['wins_b']}"
+        draw.text((70, y+72), score, font=_font(34), fill=accent if match["won"] else (245, 160, 150))
+        draw.text((330, y+82), "WON" if match["won"] else "NOT WON", font=_font(20), fill=accent if match["won"] else (245, 160, 150))
+    draw.text((42, height-34), "EMPIRE CENTURY  •  CLUB DIVISION", font=_font(17), fill=(145, 165, 193))
+    output = BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    return output.getvalue()
