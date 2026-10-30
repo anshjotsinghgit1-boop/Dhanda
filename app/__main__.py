@@ -28,6 +28,7 @@ from app.mining_wars import create_war, join_team, war_snapshot, start_fight, ca
 from app.timed_events import register_timed_handlers, timed_scheduler, register_mining_group
 from app.mining_rewards import MiningGroupMemberTracker, top_mining_groups
 from app.club_live import register_club_live_handlers
+from app.club_competitions import register_competition_handlers
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
@@ -42,6 +43,7 @@ async def register_group_when_bot_added(event: ChatMemberUpdated):
     if event.new_chat_member.status in ("member", "administrator"):
         await register_mining_group(event.chat.id, event.chat.title or "Mining group")
 register_club_live_handlers(bot, dp)
+register_competition_handlers(bot, dp)
 
 # Register group-only guards before gameplay handlers so earlier handlers cannot bypass them.
 @dp.message(F.chat.type.in_({"group", "supergroup"}), F.text.startswith("/"), ~F.text.startswith("/miningwar"), ~F.text.startswith("/miningstatus"), ~F.text.startswith("/war"), ~F.text.startswith("/rank"), ~F.text.startswith("/events"), ~F.text.startswith("/topgroups"))
