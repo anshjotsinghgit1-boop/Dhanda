@@ -15,6 +15,7 @@ from aiogram.client.default import DefaultBotProperties
 from app.config import BOT_TOKEN
 from app.db import connect, close, get_pool
 from app.economy import register_player, get_player, collect_income, auto_upgrade_business, upgrade_business, production_per_second, upgrade_cost
+from app.npcs import seed_npcs
 from app.keyboards import main_menu, my_empire_keyboard, back_home_keyboard
 from app.seasons import season_scheduler
 from app.assets import buy_gold, sell_gold, list_assets, buy_asset, inventory, buy_industrial_building, settle_industry, resume_industry
@@ -931,6 +932,8 @@ async def help_industry(callback: CallbackQuery):
 
 async def main():
     await connect()
+    npc_count = await seed_npcs()
+    logging.getLogger(__name__).info('NPC roster ready: %s game characters', npc_count)
     season_task = asyncio.create_task(season_scheduler(), name='season-scheduler')
     timed_task = asyncio.create_task(timed_scheduler(bot), name='timed-events-scheduler')
     try:

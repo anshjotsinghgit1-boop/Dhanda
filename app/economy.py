@@ -5,6 +5,11 @@ from app.mining_rewards import collection_bonus_multiplier
 OFFLINE_CAP_SECONDS = 8 * 60 * 60
 BASE_CASH_PER_SECOND = 1
 
+def requires_club_competition(level: int) -> bool:
+    """Club requirement alternates: 12→13, 14→15, …, 52→53."""
+    return 12 <= int(level) < 54 and int(level) % 2 == 0
+
+
 def upgrade_cost(level: int) -> int:
     return 500 * level * level
 
@@ -59,34 +64,31 @@ async def auto_upgrade_business(telegram_id: int) -> list[str]:
 
     Cash spent on an upgrade is deducted from the treasury only; stocks, gold,
     reputation and owned assets are left untouched, so net worth is not reset.
-    From level 12 onward, two club-battle wins are still required per level.
+    Club competitions are required on alternating upgrades.
     """
     messages: list[str] = []
     async with get_pool().acquire() as conn:
         async with conn.transaction():
             p = await conn.fetchrow(
-                'SELECT cash, business_level, club_battle_wins FROM players WHERE telegram_id=$1 FOR UPDATE',
+                'SELECT cash, business_level, club_completed_level FROM players WHERE telegram_id=$1 FOR UPDATE',
                 telegram_id,
             )
             if not p:
                 return messages
             cash = int(p['cash'])
             level = int(p['business_level'])
-            wins = int(p['club_battle_wins'] or 0)
+            completed_level = int(p['club_completed_level'] or 0)
             while level < 54:
                 cost = upgrade_cost(level)
                 if cash < cost:
                     break
-                if level >= 12 and wins < 2:
+                if requires_club_competition(level) and completed_level != level:
                     break
                 cash -= cost
                 level += 1
-                if level > 12:
-                    wins = 0
                 await conn.execute(
                     '''UPDATE players
                        SET cash=$1, business_level=$2,
-                           club_battle_wins=CASE WHEN $2 > 12 THEN 0 ELSE club_battle_wins END
                        WHERE telegram_id=$3''',
                     cash, level, telegram_id,
                 )
@@ -109,7 +111,7 @@ async def upgrade_business(telegram_id: int) -> tuple[bool, str]:
     if level >= 54:
         return False, 'Your business is already at the maximum level (54).'
     cost = upgrade_cost(level)
-    if level >= 12 and int(p['club_battle_wins'] or 0) < 2:
-        remaining = 2 - int(p['club_battle_wins'] or 0)
-        return False, f'🏛 Club battle requirement: win {remaining} more match(es) before reaching level {level + 1}.'
+    completed_level = int(p['club_completed_level'] or 0)
+    if requires_club_competition(level) and completed_level != level:
+        return False, f'🏛 Complete both matches in the Level {level} club competition before reaching level {level + 1}.'
     return False, f'Keep building: reach {cost:,} cash to unlock level {level + 1}.'
