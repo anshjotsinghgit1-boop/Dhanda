@@ -34,7 +34,7 @@ async def _edit_war_screen(bot, chat_id, message_id, text, markup=None):
         logging.getLogger(__name__).debug("Could not edit mining screen %s in %s", message_id, chat_id, exc_info=True)
 
 
-async def _refresh_war_screens(bot: Bot):
+async def _refresh_war_screens(bot: Bot, force=False):
     """Keep both groups on the same server deadline and edit countdown checkpoints."""
     async with get_pool().acquire() as conn:
         rows = await conn.fetch("""SELECT o.*,w.current_matchup,main.chat_id AS main_chat,
@@ -56,9 +56,9 @@ async def _refresh_war_screens(bot: Bot):
             checkpoint = math.ceil(remaining)
             label = f"⏱️ {checkpoint} SECONDS LEFT"
             markup = _box_kb(int(row["war_id"]), int(row["matchup_number"]))
-        if checkpoint not in {101, 102, 103, 15, 10, 7, 5, 3, 1}:
+        if not force and checkpoint not in {101, 102, 103, 15, 10, 7, 5, 3, 1}:
             continue
-        if int(row["countdown_mark"] or -1) == checkpoint:
+        if not force and int(row["countdown_mark"] or -1) == checkpoint:
             continue
         async with get_pool().acquire() as conn:
             await conn.execute(
@@ -158,19 +158,21 @@ async def matchmake_waiting_teams(bot: Bot):
              f"Your {main['team_size']}-player team faces four real teams from other groups. Win all four matchups. "
              "Each matchup has a simultaneous 15-second box-pick window.")
     sent_messages = []
-    for team in teams:
+    for index, team in enumerate(teams):
         try:
-            sent_messages.append(await bot.send_message(team["chat_id"], intro + "\\n⏳ Matchup starts in 3..."))
+            suffix = "\\n⏳ Matchup 1 starts in 3..." if index <= 1 else "\\n⌛ Your matchup will start after the previous team finishes."
+            sent_messages.append(await bot.send_message(team["chat_id"], intro + suffix))
         except Exception:
             sent_messages.append(None)
     main_message_id = sent_messages[0].message_id if sent_messages[0] else None
-    opponent_message_id = sent_messages[1].message_id if sent_messages[1] else None
     async with get_pool().acquire() as conn:
-        await conn.execute(
-            """UPDATE mining_team_war_opponents SET main_message_id=$1,opponent_message_id=$2
-               WHERE war_id=$3 AND matchup_number=1""",
-            main_message_id, opponent_message_id, war_id
-        )
+        for matchup_no in range(1, 5):
+            opponent_message_id = sent_messages[matchup_no].message_id if sent_messages[matchup_no] else None
+            await conn.execute(
+                """UPDATE mining_team_war_opponents SET main_message_id=$1,opponent_message_id=$2
+                   WHERE war_id=$3 AND matchup_number=$4""",
+                main_message_id, opponent_message_id, war_id, matchup_no
+            )
 
 async def _start_matchup(conn, war_id: int, matchup: int):
     await conn.execute("UPDATE mining_team_war_opponents SET status='active',deadline_at=NOW()+INTERVAL '18 seconds',countdown_mark=-1 WHERE war_id=$1 AND matchup_number=$2",war_id,matchup)
@@ -224,9 +226,9 @@ async def mining_team_tick(bot: Bot):
                         await conn.execute("UPDATE mining_team_wars SET current_matchup=$2,main_wins=main_wins+1 WHERE id=$1",item["war_id"],nxt)
                         await _start_matchup(conn,int(item["war_id"]),nxt)
                         await conn.execute(
-                            """UPDATE mining_team_war_opponents SET main_message_id=$1,opponent_message_id=$2
-                               WHERE war_id=$3 AND matchup_number=$4""",
-                            item["main_message_id"],item["opponent_message_id"],item["war_id"],nxt
+                            """UPDATE mining_team_war_opponents SET main_message_id=$1
+                               WHERE war_id=$2 AND matchup_number=$3""",
+                            item["main_message_id"],item["war_id"],nxt
                         )
                         result=f"✅ <b>MATCHUP {item['matchup_number']} WON</b> — {aw}–{bw}.\\n⏳ MATCHUP {nxt}/4 starts in 3..."
                         next_matchup = nxt
@@ -249,7 +251,7 @@ async def mining_team_tick(bot: Bot):
         ):
             await _edit_war_screen(
                 bot, chat_id, message_id, result,
-                _box_kb(int(item["war_id"]), next_matchup) if next_matchup else None
+                None
             )
 
 
