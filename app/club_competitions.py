@@ -5,7 +5,7 @@ import random
 from datetime import datetime, timezone
 from aiogram import F, Bot, Dispatcher
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
-from app.competition_images import render_roster
+from app.competition_images import render_roster, render_competition_result
 from app.db import get_pool
 
 log = logging.getLogger(__name__)
@@ -86,6 +86,8 @@ async def _finish_competition_if_ready(conn, cid, level):
 
 
 async def _resolve_match(bot: Bot, match_id: int, force_timeout=False):
+    result_matches = []
+    player_name = 'Player'
     async with get_pool().acquire() as conn:
         async with conn.transaction():
             m = await conn.fetchrow("SELECT * FROM club_competition_matches WHERE id=$1", match_id)
@@ -167,6 +169,21 @@ async def _resolve_match(bot: Bot, match_id: int, force_timeout=False):
                 "SELECT completed_matches,matches_won,passed FROM club_competition_participants WHERE competition_id=$1 AND player_id=$2",
                 m["competition_id"], human_id
             )
+            if state and int(state["completed_matches"]) >= 2:
+                player_name = await conn.fetchval("SELECT display_name FROM players WHERE telegram_id=$1", human_id) or "Player"
+                rows = await conn.fetch(
+                    """SELECT cm.wins_a,cm.wins_b,cm.winner_id,p.display_name AS opponent_name
+                       FROM club_competition_matches cm
+                       JOIN players p ON p.telegram_id=cm.player_b
+                       WHERE cm.competition_id=$1 AND cm.player_a=$2
+                       ORDER BY cm.match_number""",
+                    m["competition_id"], human_id
+                )
+                result_matches = [
+                    {"wins_a": int(row["wins_a"]), "wins_b": int(row["wins_b"]),
+                     "won": row["winner_id"] == human_id, "opponent_name": row["opponent_name"]}
+                    for row in rows
+                ]
     if final:
         match_line = f"🏛 <b>LEVEL {level} MATCH RESULT</b>\nOpponent: {opponent_name}\nScore: {wa}–{wb}\n" + (
             "🏆 You won this match!" if match_winner == human_id else "This match was not a win."
@@ -176,9 +193,17 @@ async def _resolve_match(bot: Bot, match_id: int, force_timeout=False):
         else:
             match_line += f"\n\nMatch {int(state['completed_matches']) if state else 1}/2 complete. Your second match still counts, even if you lost this one."
         try:
-            await bot.send_message(human_id, match_line)
+            if state and int(state["completed_matches"]) >= 2 and len(result_matches) == 2:
+                result_image = await render_competition_result(bot, int(level), player_name, result_matches, bool(state["passed"]))
+                await bot.send_photo(
+                    human_id,
+                    BufferedInputFile(result_image, filename=f"level_{level}_competition_result.png"),
+                    caption=match_line,
+                )
+            else:
+                await bot.send_message(human_id, match_line)
         except Exception:
-            pass
+            log.exception("Could not send final competition result to %s", human_id)
     else:
         notice = (
             f"🏛 <b>LEVEL {level} MATCH · ROUND {rn}</b>\n"
