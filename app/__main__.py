@@ -308,13 +308,23 @@ async def contextual_rules(callback: CallbackQuery):
             "• Groups are used for mining activities."
         ),
     }
-    await callback.message.edit_text(
-        sections[callback.data],
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📘 All Rules", callback_data="game_rules", style="primary")],
-            [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
-             InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
-        ]))
+    text = sections[callback.data]
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📘 All Rules", callback_data="game_rules", style="primary")],
+        [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
+         InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
+    ])
+    message = callback.message
+    try:
+        if message.text is not None:
+            await message.edit_text(text, reply_markup=markup)
+        elif message.caption is not None:
+            await message.edit_caption(caption=text, reply_markup=markup)
+        else:
+            await message.answer(text, reply_markup=markup)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
     await callback.answer()
 
 @dp.message(Command('empire'))
