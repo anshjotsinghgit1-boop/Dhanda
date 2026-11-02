@@ -30,6 +30,7 @@ from app.timed_events import register_timed_handlers, timed_scheduler, register_
 from app.mining_rewards import MiningGroupMemberTracker, top_mining_groups
 from app.club_competitions import register_competition_handlers
 from app.competition_images import render_forbes_leaderboard
+from app.telegram_ui import safe_edit_message
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
@@ -216,7 +217,7 @@ async def topgroups_command(message: Message):
 async def topgroups_callback(callback: CallbackQuery):
     text = await top_mining_groups_text()
     try:
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(
+        await safe_edit_message(callback.message,text, reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="🔄 Refresh", callback_data="top_mining_groups")]]
         ))
     except TelegramBadRequest as exc:
@@ -227,20 +228,7 @@ async def topgroups_callback(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "events_refresh")
 async def events_refresh(callback: CallbackQuery):
-    message = callback.message
-    text = events_text()
-    try:
-        if message.text is not None:
-            await message.edit_text(text, reply_markup=events_keyboard())
-        elif message.caption is not None:
-            await message.edit_caption(caption=text, reply_markup=events_keyboard())
-        else:
-            # The button may be attached to a media/service message with no editable text.
-            await message.answer(text, reply_markup=events_keyboard())
-    except TelegramBadRequest as exc:
-        error = str(exc).lower()
-        if "message is not modified" not in error:
-            raise
+    await safe_edit_message(callback.message, events_text(), reply_markup=events_keyboard())
     await callback.answer("⏱️ Countdown refreshed")
 
 
@@ -249,7 +237,7 @@ async def start_company(callback: CallbackQuery):
     await register_player(callback.from_user)
     await auto_upgrade_business(callback.from_user.id)
     p = await get_player(callback.from_user.id)
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         "✅ <b>Your company is open!</b>\n\n" + dashboard_text(
             p, await net_worth(callback.from_user.id)),
         reply_markup=main_menu())
@@ -258,7 +246,7 @@ async def start_company(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "game_rules")
 async def game_rules(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         "📘 <b>EMPIRE CENTURY · RULEBOOK</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "Choose a section to see only the rules relevant to that activity.",
@@ -314,17 +302,7 @@ async def contextual_rules(callback: CallbackQuery):
         [InlineKeyboardButton(text="🔙 Back", callback_data="more_menu"),
          InlineKeyboardButton(text="🏠 Home", callback_data="dashboard")],
     ])
-    message = callback.message
-    try:
-        if message.text is not None:
-            await message.edit_text(text, reply_markup=markup)
-        elif message.caption is not None:
-            await message.edit_caption(caption=text, reply_markup=markup)
-        else:
-            await message.answer(text, reply_markup=markup)
-    except TelegramBadRequest as exc:
-        if "message is not modified" not in str(exc).lower():
-            raise
+    await safe_edit_message(callback.message, text, reply_markup=markup)
     await callback.answer()
 
 @dp.message(Command('empire'))
@@ -338,7 +316,7 @@ async def empire(message: Message):
 
 @dp.callback_query(F.data == "more_menu")
 async def more_menu(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         "🌈 <b>EMPIRE CONTROL CENTER</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "Choose a department. Each section opens its own focused screen.",
@@ -363,7 +341,7 @@ async def dashboard(callback: CallbackQuery):
     await auto_upgrade_business(callback.from_user.id)
     p = await get_player(callback.from_user.id)
     try:
-        await callback.message.edit_text(
+        await safe_edit_message(callback.message,
             dashboard_text(p, await net_worth(callback.from_user.id)),
             reply_markup=main_menu(),
         )
@@ -381,7 +359,7 @@ async def my_empire(callback: CallbackQuery):
         return
     await auto_upgrade_business(callback.from_user.id)
     p = await get_player(callback.from_user.id)
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         dashboard_text(p, await net_worth(callback.from_user.id)),
         reply_markup=my_empire_keyboard(),
     )
@@ -403,7 +381,7 @@ async def collect(callback: CallbackQuery):
     # Keep the empire screen in place; show collection and automatic level-ups separately.
     await callback.message.answer(f'💚 <b>Income collected: {amount:,} cash!</b>{suffix}')
     p = await get_player(callback.from_user.id)
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         dashboard_text(p, await net_worth(callback.from_user.id)),
         reply_markup=my_empire_keyboard())
     await callback.answer('Income collected')
@@ -412,7 +390,7 @@ async def collect(callback: CallbackQuery):
 async def upgrade(callback: CallbackQuery):
     ok, message = await upgrade_business(callback.from_user.id)
     p = await get_player(callback.from_user.id)
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         ('✅ ' if ok else 'ℹ️ ') + message + '\n\n' +
         dashboard_text(p, await net_worth(callback.from_user.id)),
         reply_markup=main_menu())
@@ -497,7 +475,7 @@ async def mining_join_callback(callback: CallbackQuery):
     if ok:
         text, markup = await mining_text(callback.message.chat.id)
         try:
-            await callback.message.edit_text(text, reply_markup=markup)
+            await safe_edit_message(callback.message,text, reply_markup=markup)
         except Exception:
             pass
     await callback.answer(result, show_alert=not ok)
@@ -512,7 +490,7 @@ async def mining_start_callback(callback: CallbackQuery):
         return
     ok, result, resolved_id, winner = await start_fight(callback.message.chat.id, callback.from_user.id, war_id)
     if ok:
-        await callback.message.edit_text("⛏ <b>MINING RESULTS</b>\n\n" + result)
+        await safe_edit_message(callback.message,"⛏ <b>MINING RESULTS</b>\n\n" + result)
     await callback.answer(result if len(result) < 180 else "Mining completed.", show_alert=not ok)
 
 
@@ -520,7 +498,7 @@ async def mining_start_callback(callback: CallbackQuery):
 async def mining_refresh_callback(callback: CallbackQuery):
     text, markup = await mining_text(callback.message.chat.id)
     try:
-        await callback.message.edit_text(text, reply_markup=markup)
+        await safe_edit_message(callback.message,text, reply_markup=markup)
     except Exception:
         pass
     await callback.answer("Mining board refreshed.")
@@ -530,7 +508,7 @@ async def mining_refresh_callback(callback: CallbackQuery):
 async def mining_cancel_callback(callback: CallbackQuery):
     ok, result = await cancel_war(callback.message.chat.id, callback.from_user.id, int(callback.data.rsplit('_', 1)[1]))
     if ok:
-        await callback.message.edit_text("✖ " + result)
+        await safe_edit_message(callback.message,"✖ " + result)
     await callback.answer(result, show_alert=not ok)
 
 
@@ -684,7 +662,7 @@ async def box_setup_save(c: CallbackQuery):
     if not await save_layout(c.from_user.id,slot,items):
         await c.answer("Need exactly 3 Money, 3 Normal, and 3 Empty boxes.",show_alert=True); return
     await c.answer(f"Layout {slot}/5 saved!",show_alert=True)
-    await c.message.edit_text(f"✅ Layout {slot}/5 saved.\n💰 Money ×3 · ⚪ Normal ×3 · 🕳 Empty ×3")
+    await safe_edit_message(c.message,f"✅ Layout {slot}/5 saved.\n💰 Money ×3 · ⚪ Normal ×3 · 🕳 Empty ×3")
 
 @dp.message(Command('war'))
 async def war_command(message: Message):
@@ -780,7 +758,7 @@ async def business_battle_pick(c: CallbackQuery):
         result+="\n\n✅ <b>BATTLE ENDED</b> · Final box board remains visible below."
     else:
         result+=f"\n\n📦 <b>Boxes opened: {len(picked)}/9</b>\n{'Pair found — open one more box to confirm the result.' if pair else 'Find a matching pair. At least 3 boxes must be opened before the result is final.'}"
-    await c.message.edit_text(result,reply_markup=board)
+    await safe_edit_message(c.message,result,reply_markup=board)
     await c.answer(f"{icons[kind]} {labels[kind]}")
     
 
@@ -933,7 +911,7 @@ async def hire_accept_command(message: Message):
 
 @dp.callback_query(F.data == 'help_club')
 async def help_club(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         '🏰 <b>SYSTEM CLUB DIVISION</b>\n\n'
         'Clubs are created and managed by the game. Players cannot create clubs, join by tags, or donate.\n\n'
         'A five-minute level-specific competition lobby opens hourly. Join from its private message, follow the four roster updates, then play two different opponents. Win both best-of-three matches to pass.',
@@ -947,7 +925,7 @@ async def help_club(callback: CallbackQuery):
 
 @dp.callback_query(F.data == 'help_gold')
 async def help_gold(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         '🪙 <b>GOLD EXCHANGE</b>\n'
         'Rate: 1,000 cash per gram.\n'
         'Buy: /gold buy 2\n'
@@ -962,7 +940,7 @@ async def help_gold(callback: CallbackQuery):
 
 @dp.callback_query(F.data == 'help_assets')
 async def help_assets(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         '🏬 <b>ASSET COLLECTION</b>\n'
         'Browse /assetshop, buy with /buyasset sports_car, and check your collection with /inventory.',
         reply_markup=back_home_keyboard("more_menu"))
@@ -971,7 +949,7 @@ async def help_assets(callback: CallbackQuery):
 
 @dp.callback_query(F.data == 'help_industry')
 async def help_industry(callback: CallbackQuery):
-    await callback.message.edit_text(
+    await safe_edit_message(callback.message,
         '🏭 <b>INDUSTRY</b>\n'
         'View buildings with /industry and buy one with /buildindustry workshop. Buildings generate reputation over time.',
         reply_markup=back_home_keyboard("more_menu"))
