@@ -8,6 +8,7 @@ from aiogram import F, Bot, Dispatcher
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from app.competition_images import render_roster, render_competition_result
 from app.db import get_pool
+from app.telegram_ui import safe_edit_message
 
 log = logging.getLogger(__name__)
 ROUND_SECONDS = 15
@@ -512,7 +513,7 @@ def register_competition_handlers(bot: Bot, dp: Dispatcher):
                 f"⏱️ {remaining} seconds left. Waiting for the round timer..."
             )
             try:
-                await c.message.edit_text(
+                await safe_edit_message(c.message,
                     text,
                     reply_markup=_boxes(match_id, box_no, kind),
                 )
