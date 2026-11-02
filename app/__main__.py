@@ -227,10 +227,19 @@ async def topgroups_callback(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "events_refresh")
 async def events_refresh(callback: CallbackQuery):
+    message = callback.message
+    text = events_text()
     try:
-        await callback.message.edit_text(events_text(), reply_markup=events_keyboard())
+        if message.text is not None:
+            await message.edit_text(text, reply_markup=events_keyboard())
+        elif message.caption is not None:
+            await message.edit_caption(caption=text, reply_markup=events_keyboard())
+        else:
+            # The button may be attached to a media/service message with no editable text.
+            await message.answer(text, reply_markup=events_keyboard())
     except TelegramBadRequest as exc:
-        if "message is not modified" not in str(exc).lower():
+        error = str(exc).lower()
+        if "message is not modified" not in error:
             raise
     await callback.answer("⏱️ Countdown refreshed")
 
