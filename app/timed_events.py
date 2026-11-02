@@ -14,7 +14,7 @@ from aiogram.types import BufferedInputFile
 
 log = logging.getLogger(__name__)
 MINING_INTERVAL = 7200
-CLUB_INTERVAL = 3600
+CLUB_INTERVAL = 6 * 60  # TEST MODE: open club competitions every 6 minutes
 CLUB_TZ = ZoneInfo('Asia/Kolkata')
 CLUB_OPEN_HOURS = set(range(10, 24)) | {0}
 _club_roster_announced = set()
@@ -76,13 +76,13 @@ async def announce_countdowns(bot: Bot, now: int):
 
 
 async def announce_club_rosters(bot: Bot, now_local: datetime):
-    """Send one clear roster image exactly one minute before each scheduled club opening."""
-    if now_local.minute != 59:
+    """Send one clear roster image one minute before each 6-minute test opening."""
+    opening_minute = (now_local.minute + 1) % 60
+    opening_hour = (now_local.hour + (1 if now_local.minute == 59 else 0)) % 24
+    if opening_minute % 6 != 0 or opening_hour not in CLUB_OPEN_HOURS:
         return
-    opening_hour = (now_local.hour + 1) % 24
-    if opening_hour not in CLUB_OPEN_HOURS:
-        return
-    slot = (now_local.date().isoformat(), opening_hour)
+    opening_date = (now_local.date() + timedelta(days=1)).isoformat() if now_local.minute == 59 and now_local.hour == 23 else now_local.date().isoformat()
+    slot = (opening_date, opening_hour, opening_minute)
     if slot in _club_roster_announced:
         return
     _club_roster_announced.add(slot)
@@ -118,7 +118,7 @@ async def announce_club_rosters(bot: Bot, now_local: datetime):
                     log.debug("Pre-opening roster delivery failed for %s", player["telegram_id"])
         except Exception:
             log.exception("Could not render pre-opening roster for level %s", level)
-    if len(_club_roster_announced) > 64:
+    if len(_club_roster_announced) > 128:
         keep_date = now_local.date().isoformat()
         _club_roster_announced.intersection_update({x for x in _club_roster_announced if x[0] == keep_date})
 
@@ -146,12 +146,13 @@ async def timed_scheduler(bot: Bot):
                     except Exception:
                         log.exception("Mining event failed for group %s", group["chat_id"])
                 await notify_players(bot, "⛏️ Mining is LIVE in your registered group! You have 5 minutes to join. Open the group event message and tap JOIN MINING.")
-            if now_local.minute == 0 and now_local.hour in CLUB_OPEN_HOURS:
-                slot = (now_local.date().isoformat(), now_local.hour)
+            if now_local.minute % 6 == 0 and now_local.hour in CLUB_OPEN_HOURS:
+                slot = (now_local.date().isoformat(), now_local.hour, now_local.minute)
                 if slot not in _club_opened_slots:
                     _club_opened_slots.add(slot)
-                    await open_level_competitions(bot, schedule_key=f"{now_local.date().isoformat()}T{now_local.hour:02d}")
-                    if len(_club_opened_slots) > 64:
+                    schedule_key = f"{now_local.date().isoformat()}T{now_local.hour:02d}:{now_local.minute:02d}"
+                    await open_level_competitions(bot, schedule_key=schedule_key)
+                    if len(_club_opened_slots) > 128:
                         today = now_local.date().isoformat()
                         _club_opened_slots.intersection_update({x for x in _club_opened_slots if x[0] == today})
             async with get_pool().acquire() as conn:
