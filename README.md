@@ -43,7 +43,7 @@ The local database is created automatically at `data/dhanda.sqlite3`. The `data/
 
 - Group chats are reserved for mining; use the bot in private chat for the rest of the game.
 - Use `/miningwar` in a group to register it for scheduled mining events.
-- Club competitions open hourly for active business levels from Level 12 onward. Each lobby lasts five minutes and sends four roster image updates.
+- TEST MODE: club competitions open every 6 minutes for active business levels from Level 12 onward. Restore hourly timing after testing. Each lobby lasts five minutes and sends four roster image updates.
 - Registered players face two different NPC opponents. Each match is best of three, with 15 seconds per box round. Both matches must be won in the same competition.
 - Competition result cards show both match outcomes. The bot flow still needs live end-to-end testing on the deployment device.
 
